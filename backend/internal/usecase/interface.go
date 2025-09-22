@@ -11,10 +11,15 @@ type Embedder interface {
 	EmbedImage(ctx context.Context, data []byte) ([]float32, error)
 }
 
+type SearchResult struct {
+	ID    string
+	Score float32
+}
+
 type VectorIndex interface {
-	Search(ctx context.Context, deviceID string, embedding []float32, k int) ([]string, error)
-	Insert(ctx context.Context, deviceID, id string, embedding []float32) error
-	Delete(ctx context.Context, deviceID, id string) error
+	Insert(ctx context.Context, id string, vector []float32) error
+	Search(ctx context.Context, vector []float32, k int) ([]SearchResult, error)
+	Delete(ctx context.Context, id string) error
 }
 
 type MediaRepo interface {
