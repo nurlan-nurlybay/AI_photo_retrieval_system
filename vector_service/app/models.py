@@ -1,28 +1,42 @@
-from pydantic import BaseModel, conlist, Field
-from typing import List, Literal, Optional
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
-FloatVec = conlist(float, min_items=1)
+# ---------- Add ----------
+class VectorAddRequest(BaseModel):
+    id: str
+    vector: List[float]
+    normalize: bool = True
 
-class VectorItem(BaseModel):
-    id: int = Field(..., ge=0)
-    vector: FloatVec
+class VectorAddResponse(BaseModel):
+    ok: bool
+    id: str
+    replaced: bool = False
+    dim: Optional[int] = None
+    error: Optional[str] = None
 
-class AddBatchRequest(BaseModel):
-    items: List[VectorItem]
 
-class AddOneRequest(BaseModel):
-    id: int
-    vector: FloatVec
+# ---------- Delete ----------
+class VectorDeleteResponse(BaseModel):
+    ok: bool
+    id: Optional[str] = None
+    deleted: Optional[bool] = None
+    error: Optional[str] = None
 
-class SearchRequest(BaseModel):
-    vector: FloatVec
-    k: int = 10
 
-class RemoveRequest(BaseModel):
-    ids: List[int]
+# ---------- Search ----------
+class VectorSearchRequest(BaseModel):
+    vector: List[float]
+    k: int = Field(..., gt=0)
+    normalize: bool = True
 
-class StatsResponse(BaseModel):
-    count: int
-    dim: int
-    metric: Literal["cosine","l2"]
-    shard_id: str
+class SearchResult(BaseModel):
+    id: str
+    score: float
+
+class VectorSearchResponse(BaseModel):
+    ok: bool
+    k: int
+    results: List[SearchResult] = []
+    degraded: bool = False
+    tookMs: Optional[int] = None
+    error: Optional[str] = None

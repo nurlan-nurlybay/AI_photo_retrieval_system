@@ -1,72 +1,49 @@
-from fastapi import FastAPI, HTTPException
-from typing import List
-import numpy as np
-
-from .config import settings
-from .models import (
-    AddBatchRequest, AddOneRequest, SearchRequest, RemoveRequest, StatsResponse
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from app.models import (
+    VectorAddRequest, VectorAddResponse,
+    VectorDeleteResponse,
+    VectorSearchRequest, VectorSearchResponse,
 )
-from .index import VectorIndex, _np_float32
+import app.index as idx
 
-app = FastAPI(title="Vector Service", version="0.1.0")
-
-# Single in-memory index per shard
-INDEX = VectorIndex(dim=settings.VECTOR_DIM, metric=settings.METRIC)
+app = FastAPI(title="faiss-service", version="1.0")
 
 @app.get("/v1/healthz")
 def healthz():
-    return {"ok": True, "shard_id": settings.SHARD_ID}
+    state = idx.health()
+    return {"ok": True, **state}
 
-@app.get("/v1/stats", response_model=StatsResponse)
-def stats():
-    return StatsResponse(
-        count=INDEX.count,
-        dim=settings.VECTOR_DIM,
-        metric=settings.METRIC,
-        shard_id=settings.SHARD_ID,
-    )
+@app.post("/v1/vectors/add", response_model=VectorAddResponse)
+def add_vector(req: VectorAddRequest):
+    try:
+        res = idx.add(req.id, req.vector, req.normalize)
+        return VectorAddResponse(**res)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"ok": False, "error": str(e)})
+    except Exception:
+        return JSONResponse(status_code=500, content={"ok": False, "error": "index_write_failed"})
 
-@app.post("/v1/vectors/add")
-def add_batch(req: AddBatchRequest):
-    if not req.items:
-        raise HTTPException(status_code=400, detail="Empty items")
-    ids: List[int] = [it.id for it in req.items]
-    vecs = [_np_float32(it.vector) for it in req.items]
-    X = np.vstack(vecs)
-    if X.shape[1] != settings.VECTOR_DIM:
-        raise HTTPException(status_code=400, detail=f"Bad dim {X.shape[1]}; expected {settings.VECTOR_DIM}")
-    INDEX.add(ids, X)
-    return {"added": len(ids)}
+@app.delete("/v1/vectors/{id}", response_model=VectorDeleteResponse)
+def delete_vector(id: str):
+    try:
+        res = idx.delete(id)
+        return VectorDeleteResponse(**res)
+    except KeyError:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "not_found", "id": id})
+    except Exception:
+        return JSONResponse(status_code=500, content={"ok": False, "error": "index_delete_failed"})
 
-@app.post("/v1/vectors/add_one")
-def add_one(req: AddOneRequest):
-    X = _np_float32(req.vector)
-    if X.shape[1] != settings.VECTOR_DIM:
-        raise HTTPException(status_code=400, detail=f"Bad dim {X.shape[1]}; expected {settings.VECTOR_DIM}")
-    INDEX.add([req.id], X)
-    return {"added": 1}
+@app.post("/v1/vectors/search", response_model=VectorSearchResponse)
+def search_vector(req: VectorSearchRequest):
+    try:
+        res = idx.search(req.vector, req.k, req.normalize)
+        return VectorSearchResponse(**res)
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"ok": False, "error": str(e), "k": req.k})
+    except Exception:
+        return JSONResponse(status_code=500, content={"ok": False, "error": "index_search_failed", "k": req.k})
 
-@app.post("/v1/search")
-def search(req: SearchRequest):
-    k = min(max(1, req.k), settings.MAX_K)
-    q = _np_float32(req.vector)
-    if q.shape[1] != settings.VECTOR_DIM:
-        raise HTTPException(status_code=400, detail=f"Bad dim {q.shape[1]}; expected {settings.VECTOR_DIM}")
-    D, I = INDEX.search(q, k)
-    # Return photo_id + distance for first (and only) query row
-    results = []
-    for d, i in zip(D[0].tolist(), I[0].tolist()):
-        if i == -1:
-            continue
-        results.append({"id": int(i), "distance": float(d)})
-    return {"results": results}
-
-@app.post("/v1/vectors/remove")
-def remove(req: RemoveRequest):
-    removed = INDEX.remove(req.ids)
-    return {"removed": removed}
-
-@app.post("/v1/reset")
-def reset():
-    INDEX.reset()
-    return {"ok": True}
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8002, reload=False)
