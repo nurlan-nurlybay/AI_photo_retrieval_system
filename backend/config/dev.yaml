@@ -17,6 +17,26 @@ postgres:
   maxIdleConns: 5
   connMaxLifetime: "5m"
 
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+  dialTimeout: 2s
+  readTimeout: 1s
+  writeTimeout: 1s
+  poolSize: 10
+
+clip:
+  baseURL: "http://clip-service:8000"
+  timeout: 5s
+  maxIdleConn: 5
+
+faiss:
+  host: "faiss-service"
+  port: 9000
+  protocol: "http"
+  timeout: 5s
+
 log:
   level: "debug" # "info", "debug", "warn", "error"
   format: "json" # "json", "text"

@@ -5,6 +5,9 @@ import (
 	"log"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
+	clipadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/clip"
+	faissadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss"
+	postgresadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/postgres"
 	redisadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/redis"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
 )
@@ -13,7 +16,7 @@ type App struct {
 	Redis  *redisadapter.Client
 	Clip   *clipadapter.Client
 	Faiss  *faissadapter.Client
-	PGRepo *postgresadapter.MediaRepo
+	PGRepo *postgresadapter.MediaRepository
 
 	SearchUC *usecase.SearchUsecase
 	// Tracer trace.TracerProvider
@@ -29,7 +32,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		log.Fatalf("failed to connect to faiss: %v", err)
 	}
 
-	pgRepo, err := postgresinfra.NewMediaRepository(cfg.Postgres.DSN)
+	pgRepo, err := postgresadapter.NewMediaRepository(ctx, cfg.Postgres.DSN())
 	if err != nil {
 		log.Fatalf("failed to connect to postgres: %v", err)
 	}

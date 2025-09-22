@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -13,6 +14,9 @@ type (
 
 		HTTP     HTTP     `yaml:"http"`
 		Postgres Postgres `yaml:"postgres"`
+		Redis    Redis    `yaml:"redis"`
+		Clip     Clip     `yaml:"clip"`
+		Faiss    Faiss    `yaml:"faiss"`
 		Log      Log      `yaml:"log"`
 	}
 
@@ -35,6 +39,29 @@ type (
 		ConnMaxLifetime time.Duration `yaml:"connMaxLifetime"`
 	}
 
+	Redis struct {
+		Addr         string        `yaml:"addr"`        // "host:port"
+		Password     string        `yaml:"password"`    // optional
+		DB           int           `yaml:"db"`          // 0 by default
+		DialTimeout  time.Duration `yaml:"dialTimeout"` // connection timeout
+		ReadTimeout  time.Duration `yaml:"readTimeout"`
+		WriteTimeout time.Duration `yaml:"writeTimeout"`
+		PoolSize     int           `yaml:"poolSize"`
+	}
+
+	Clip struct {
+		BaseURL     string        `yaml:"baseURL"`     // http://clip-service:8000
+		Timeout     time.Duration `yaml:"timeout"`     // request timeout
+		MaxIdleConn int           `yaml:"maxIdleConn"` // optional pool tuning
+	}
+
+	Faiss struct {
+		Host     string        `yaml:"host"`     // faiss-service
+		Port     uint16        `yaml:"port"`     // 9000
+		Protocol string        `yaml:"protocol"` // "http" or "grpc"
+		Timeout  time.Duration `yaml:"timeout"`
+	}
+
 	Log struct {
 		Level        string `yaml:"level"`        // "debug", "info", "warn", "error"
 		Format       string `yaml:"format"`       // "text" or "json"
@@ -55,4 +82,15 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+func (p Postgres) DSN() string {
+	return fmt.Sprintf(
+		"postgres://%s:%s@%s:%d/%s?sslmode=disable",
+		p.User,
+		p.Password,
+		p.Host,
+		p.Port,
+		p.DBName,
+	)
 }
