@@ -21,17 +21,17 @@ func NewSearchUsecase(embedder Embedder, vectorIndex VectorIndex, mediaRepo Medi
 }
 
 func (s *SearchUsecase) SearchByText(ctx context.Context, deviceID, text string, k int) ([]domain.Media, error) {
-	embedding, err := s.embedder.EmbedText(text)
+	embedding, err := s.embedder.EmbedText(ctx, text)
 	if err != nil {
 		return nil, err
 	}
 
-	ids, err := s.vectorIndex.Search(deviceID, embedding, k)
+	ids, err := s.vectorIndex.Search(ctx, deviceID, embedding, k)
 	if err != nil {
 		return nil, err
 	}
 
-	medias, err := s.mediaRepo.FindByIDs(deviceID, ids)
+	medias, err := s.mediaRepo.FindByIDs(ctx, deviceID, ids)
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,23 @@
+version: "1.0.0"
+
+http:
+  host: "0.0.0.0"
+  port: 8080
+  readTimeout: "10s"
+  writeTimeout: "10s"
+  idleTimeout: "60s"
+
+postgres:
+  host: media_postgres
+  port: 5432
+  user: "postgres"
+  password: "postgres"
+  dbname: "media"
+  maxOpenConns: 25
+  maxIdleConns: 5
+  connMaxLifetime: "5m"
+
+log:
+  level: "debug" # "info", "debug", "warn", "error"
+  format: "json" # "json", "text"
+  sourceFolder: "AI_photo_retrieval_system/backend"
