@@ -26,9 +26,14 @@ func (s *SearchUsecase) SearchByText(ctx context.Context, deviceID, text string,
 		return nil, err
 	}
 
-	ids, err := s.vectorIndex.Search(ctx, deviceID, embedding, k)
+	results, err := s.vectorIndex.Search(ctx, embedding, k)
 	if err != nil {
 		return nil, err
+	}
+
+	var ids []string
+	for _, r := range results {
+		ids = append(ids, r.ID)
 	}
 
 	medias, err := s.mediaRepo.FindByIDs(ctx, deviceID, ids)
