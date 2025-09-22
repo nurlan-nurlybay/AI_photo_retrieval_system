@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
@@ -24,9 +27,9 @@ type App struct {
 	Cache     usecase.Cache
 	VectorDB  usecase.VectorIndex
 	Embedder  usecase.Embedder
-	SearchUC *usecase.SearchUsecase
+	SearchUC  *usecase.SearchUsecase
 
-	server   *http.Server
+	server *http.Server
 	// Tracer trace.TracerProvider
 }
 
@@ -66,11 +69,32 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 }
 
 func (a *App) Run() error {
+	errCh := make(chan error, 1)
+	go func() {
+		a.Logger.Info("starting HTTP server", "addr", a.server.Addr)
+		if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errCh <- fmt.Errorf("listen and serve: %w", err)
+		}
+	}()
+
+	shutdownCh := make(chan os.Signal, 1)
+	signal.Notify(shutdownCh, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case err := <-errCh:
+		return err
+	case sig := <-shutdownCh:
+		a.Logger.Info("shutting down server", "signal", sig)
+		if err := a.server.Close(); err != nil {
+			a.Logger.Error("server shutdown error", "error", err)
+			return fmt.Errorf("server shutdown: %w", err)
+		}
+	}
 
 	return nil
-
 }
 
 func (a *App) Close() {
-
+	a.Logger.Info("closing app resources...")
+	// TODO
 }
