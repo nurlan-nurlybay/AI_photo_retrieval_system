@@ -17,8 +17,8 @@ type SearchHandler struct {
 	logger    *logger.Logger
 }
 
-func NewSearchHandler(search *usecase.SearchUsecase) *SearchHandler {
-	return &SearchHandler{searchUC: search}
+func NewSearchHandler(search *usecase.SearchUsecase, validator *validator.Validate, logger *logger.Logger) *SearchHandler {
+	return &SearchHandler{searchUC: search, validator: validator, logger: logger}
 }
 
 func (h *SearchHandler) SearchByText(c *gin.Context) {

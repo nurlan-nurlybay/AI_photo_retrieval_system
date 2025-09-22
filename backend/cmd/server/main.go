@@ -9,7 +9,8 @@ import (
 )
 
 func main() {
-	cfg, err := config.Load("config/dev.yaml")
+	cfg, err := config.Load("config.yaml")
+	// cfg, err := config.Load("./config/dev.yaml")
 	if err != nil {
 		panic(err)
 	}
@@ -18,9 +19,8 @@ func main() {
 	log.Info("config loaded", "version", cfg.Version)
 
 	ctx := context.Background()
-	defer ctx.Done()
 
-	application, err := app.New(ctx, cfg)
+	application, err := app.New(ctx, cfg, log)
 	if err != nil {
 		log.Fatal("failed to create app", "error", err)
 	}

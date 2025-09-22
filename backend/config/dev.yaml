@@ -3,41 +3,40 @@ version: "1.0.0"
 http:
   host: "0.0.0.0"
   port: 8080
-  readTimeout: "10s"
-  writeTimeout: "10s"
-  idleTimeout: "60s"
+  readTimeout: 5s
+  writeTimeout: 5s
+  idleTimeout: 30s
 
 postgres:
-  host: media_postgres
+  host: "localhost"
   port: 5432
   user: "postgres"
   password: "postgres"
   dbname: "media"
-  maxOpenConns: 25
+  maxOpenConns: 10
   maxIdleConns: 5
-  connMaxLifetime: "5m"
+  connMaxLifetime: 1h
 
 redis:
   addr: "localhost:6379"
   password: ""
   db: 0
-  dialTimeout: 2s
-  readTimeout: 1s
-  writeTimeout: 1s
+  dialTimeout: 5s
+  readTimeout: 5s
+  writeTimeout: 5s
   poolSize: 10
 
 clip:
-  baseURL: "http://clip-service:8000"
+  baseURL: "http://localhost:8001"
   timeout: 5s
-  maxIdleConn: 5
+  maxIdleConn: 10
 
 faiss:
-  host: "faiss-service"
-  port: 9000
-  protocol: "http"
+  host: "localhost"
+  port: 8002
   timeout: 5s
 
 log:
-  level: "debug" # "info", "debug", "warn", "error"
-  format: "json" # "json", "text"
-  sourceFolder: "AI_photo_retrieval_system/backend"
+  level: "debug"
+  format: "text"
+  sourceFolder: "backend"

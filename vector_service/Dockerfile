@@ -1,17 +1,16 @@
-FROM python:latest-slim
+FROM python:3.11-slim
 
 WORKDIR /app
-COPY requirements.txt /app/requirements.txt
 
-# faiss-cpu needs blas
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      libopenblas-base && \
-    pip install --no-cache-dir -r requirements.txt && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+# Install Python deps first (cache layer)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app /app/app
+# Copy service code
+COPY app ./app
 
 ENV PYTHONUNBUFFERED=1
+
 EXPOSE 8002
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002"]
