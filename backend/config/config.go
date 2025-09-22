@@ -58,7 +58,6 @@ type (
 	Faiss struct {
 		Host     string        `yaml:"host"`     // faiss-service
 		Port     uint16        `yaml:"port"`     // 9000
-		Protocol string        `yaml:"protocol"` // "http" or "grpc"
 		Timeout  time.Duration `yaml:"timeout"`
 	}
 

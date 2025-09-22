@@ -10,7 +10,7 @@ ML_URL         ?= http://localhost:8001
 PORT           ?= 8080
 
 # Database
-DB_DSN         ?= postgres://user:pass@localhost:5432/ai_photo?sslmode=disable
+DB_DSN ?= postgres://postgres:postgres@localhost:5432/media?sslmode=disable
 MIGRATIONS_DIR ?= ./migrations
 
 # Build metadata
@@ -70,7 +70,7 @@ run:
 	VECTOR_SERVICE_URL=$(VECTOR_URL) \
 	ML_SERVICE_URL=$(ML_URL) \
 	DB_DSN="$(DB_DSN)" \
-	$(GO) run -ldflags "$(LDFLAGS)" $(CMD_DIR)
+	$(GO) run -ldflags "$(LDFLAGS)" $(CMD_DIR) --config=$(CONFIG)
 
 dev:
 	@if command -v $(AIR) >/dev/null 2>&1; then \
@@ -99,3 +99,11 @@ migrate-new:
 	@test -n "$(name)" || (echo "usage: make migrate-new name=add_whatever"; exit 2)
 	@mkdir -p $(MIGRATIONS_DIR)
 	$(MIGRATE) create -ext sql -dir $(MIGRATIONS_DIR) -seq $(name)
+
+
+# ---- additional HELPERS ----
+run-dev:
+	CONFIG=config/dev.yaml $(MAKE) run
+
+run-docker:
+	CONFIG=config/docker.yaml $(MAKE) run
