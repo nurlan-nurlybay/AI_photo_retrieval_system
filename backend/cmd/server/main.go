@@ -9,22 +9,23 @@ import (
 )
 
 func main() {
-    cfg, err := config.Load("config/dev.yaml")
-    if err != nil {
-        panic(err)
-    }
+	cfg, err := config.Load("config.yaml")
+	// cfg, err := config.Load("./config/dev.yaml")
+	if err != nil {
+		panic(err)
+	}
 
-    log := logger.New(logger.Config(cfg.Log))
-    log.Info("config loaded", "version", cfg.Version)
+	log := logger.New(logger.Config(cfg.Log))
+	log.Info("config loaded", "version", cfg.Version)
 
-    ctx := context.Background()
+	ctx := context.Background()
 
-    application, err := app.New(ctx, cfg, log)
-    if err != nil {
-        log.Fatal("failed to create app", "error", err)
-    }
+	application, err := app.New(ctx, cfg, log)
+	if err != nil {
+		log.Fatal("failed to create app", "error", err)
+	}
 
-    if err := application.Run(); err != nil {
-        log.Fatal("failed to run app", "error", err)
-    }
+	if err := application.Run(); err != nil {
+		log.Fatal("failed to run app", "error", err)
+	}
 }
