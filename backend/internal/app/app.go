@@ -13,7 +13,8 @@ import (
 	clipadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/clip"
 	faissadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss"
 	postgresadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/postgres"
-	redisadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/redis"
+
+	// redisadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/redis"
 	httpdelivery "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/delivery/http"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
@@ -34,7 +35,7 @@ type App struct {
 }
 
 func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, error) {
-	redisCache := redisadapter.NewClient(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
+	// redisCache := redisadapter.NewClient(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
 
 	clipClient := clipadapter.NewClient(cfg.Clip)
 
@@ -45,6 +46,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 		log.Fatal("failed to connect to postgres: %v", err)
 		return nil, fmt.Errorf("connect postgres: %w", err)
 	}
+	log.Info("connected to postgres")
 
 	searchUC := usecase.NewSearchUsecase(clipClient, faissClient, pgRepo)
 
@@ -60,11 +62,11 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	return &App{
 		Logger:    log,
 		MediaRepo: pgRepo,
-		Cache:     redisCache,
-		VectorDB:  faissClient,
-		Embedder:  clipClient,
-		SearchUC:  searchUC,
-		server:    srv,
+		// Cache:     redisCache,
+		VectorDB: faissClient,
+		Embedder: clipClient,
+		SearchUC: searchUC,
+		server:   srv,
 	}, nil
 }
 

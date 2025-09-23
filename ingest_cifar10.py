@@ -1,54 +1,81 @@
-import os
 import requests
-import torch
 import torchvision
 import torchvision.transforms as T
-from transformers import CLIPProcessor, CLIPModel
-import numpy as np
 from io import BytesIO
 from PIL import Image
+import psycopg2
 
 SEAWEED_MASTER = "http://localhost:9333"
 FAISS_URL = "http://localhost:8002/v1/vectors/add"
-
-# load CLIP model
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
-processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+CLIP_URL = "http://localhost:8003/v1/encode/image"
 
 # CIFAR-10
 transform = T.ToTensor()
 dataset = torchvision.datasets.CIFAR10(root="./data", train=True, download=True, transform=transform)
 classes = dataset.classes
 
+
+conn = psycopg2.connect(
+    dbname="media",
+    user="postgres",
+    password="postgres",
+    host="127.0.0.1",   # host network
+    port=5432,
+)
+cur = conn.cursor()
+
+def save_to_db(img_id: str, url: str, label: str):
+    cur.execute(
+        "INSERT INTO images (id, url, label) VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING",
+        (img_id, url, label)
+    )
+    conn.commit()
+
 def upload_to_seaweedfs(img: Image.Image) -> str:
-    # ask master for fid
+    print("[seaweed] requesting fid from master…")
     assign = requests.get(f"{SEAWEED_MASTER}/dir/assign").json()
     fid = assign["fid"]
-    url = assign["url"]
+    public_url = assign["publicUrl"]
+    print(f"[seaweed] got fid={fid}, publicUrl={public_url}")
 
-    # convert PIL image to bytes
+    # Image metadata
+    print(f"[cifar] image mode={img.mode}, size={img.size}")
+
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    size_bytes = buf.tell()
+    buf.seek(0)
+    print(f"[cifar] PNG bytes length={size_bytes}")
+
+    files = {"file": ("img.png", buf, "image/png")}
+    target_url = f"http://{public_url}/{fid}"
+    print(f"[seaweed] uploading to {target_url}")
+    resp = requests.post(target_url, files=files)
+    print(f"[seaweed] upload response: {resp.status_code}")
+    resp.raise_for_status()
+    return target_url
+
+
+
+def encode_image_remote(img: Image.Image) -> list[float]:
+    print("[clip] encoding image…")
     buf = BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
-
     files = {"file": ("img.png", buf, "image/png")}
-    resp = requests.post(f"http://{url}/{fid}", files=files)
+    resp = requests.post(CLIP_URL, files=files)
+    print(f"[clip] response: {resp.status_code}")
     resp.raise_for_status()
-    return f"http://{assign['publicUrl']}/{fid}"
+    return resp.json()["vector"]
 
-def encode_image(img: Image.Image) -> list[float]:
-    inputs = processor(images=img, return_tensors="pt").to(device)
-    with torch.no_grad():
-        vec = model.get_image_features(**inputs)
-    arr = vec[0].cpu().numpy()
-    arr = arr / np.linalg.norm(arr)  # L2 normalize
-    return arr.tolist()
 
 def insert_faiss(img_id: str, vector: list[float]):
+    print(f"[faiss] inserting {img_id}")
     payload = {"id": img_id, "vector": vector}
     resp = requests.post(FAISS_URL, json=payload)
+    print(f"[faiss] response: {resp.status_code}")
     resp.raise_for_status()
+
 
 def main(n=100):
     for idx in range(n):
@@ -57,16 +84,15 @@ def main(n=100):
         class_name = classes[label]
         img_id = f"cifar_{idx}_{class_name}"
 
-        # 1. upload
+        print(f"\n=== processing {img_id} ===")
         url = upload_to_seaweedfs(pil_img)
-
-        # 2. encode
-        vec = encode_image(pil_img)
-
-        # 3. insert into FAISS
+        vec = encode_image_remote(pil_img)
         insert_faiss(img_id, vec)
+        print(f"[done] {img_id} → {url}")
 
-        print(f"[{idx}] {class_name} → {url}")
+        save_to_db(img_id, url, class_name)
+
+
 
 if __name__ == "__main__":
-    main(n=500)  # ingest first 500 CIFAR images
+    main(n=500)
