@@ -22,4 +22,9 @@ curl -X POST http://localhost:8003/v1/encode/text \
   "vector": [0.0123, -0.0456, 0.0789, ...]
 }
 ```
-Currently returns single embedding vector with length 512 for clip-vit-base-patch32.
+
+
+
+### Notes
+
+Openai/clip-vit-base-patch32 model (pretrained, no extra training needed). Outputs 512-dimensional vector that are L2-normalized so FAISS inner product ≈ cosine similarity.
