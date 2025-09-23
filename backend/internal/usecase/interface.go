@@ -13,7 +13,7 @@ type Embedder interface {
 
 type SearchResult struct {
 	ID    string
-	Score float32
+	Score float64
 }
 
 type VectorIndex interface {
