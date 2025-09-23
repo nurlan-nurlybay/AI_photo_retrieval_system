@@ -3,11 +3,9 @@ FROM golang:1.24.5-alpine AS builder
 
 WORKDIR /app
 
-# cache de
 COPY go.mod go.sum ./
 RUN go mod download
 
-# copy sour
 COPY . .
 
 # build binary (stripped)
