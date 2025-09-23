@@ -9,12 +9,12 @@ uvicorn app.main:app --host 0.0.0.0 --port 8002
 ## Availabe Routes
 
 ### Upsert vector
-```json
+```bash
 curl -X POST http://localhost:8002/v1/vectors/add \
   -H "Content-Type: application/json" \
   -d '{"id":"media_1","vector":[0.1,0.2,0.3,0.4,0.5]}'
 ```
-```json
+```bash
 curl -X POST http://localhost:8002/v1/vectors/add \
   -H "Content-Type: application/json" \
   -d '{"id":"media_2","vector":[0.11,0.19,0.29,0.41,0.52]}'
@@ -22,7 +22,7 @@ curl -X POST http://localhost:8002/v1/vectors/add \
 
 
 ### Search Vector
-```json
+```bash
 curl -X POST http://localhost:8002/v1/vectors/search \
   -H "Content-Type: application/json" \
   -d '{"vector":[0.1,0.2,0.3,0.4,0.5],"k":2}'
