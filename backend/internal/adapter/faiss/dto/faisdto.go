@@ -34,7 +34,7 @@ type VectorSearchRequest struct {
 
 type SearchResult struct {
 	ID    string  `json:"id"`
-	Score float32 `json:"score"`
+	Score float64 `json:"score"`
 }
 
 type VectorSearchResponse struct {
