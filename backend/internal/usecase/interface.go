@@ -7,8 +7,8 @@ import (
 )
 
 type Embedder interface {
-	EmbedText(ctx context.Context, text string) ([]float32, error)
-	EmbedImage(ctx context.Context, data []byte) ([]float32, error)
+	EmbedText(ctx context.Context, text string) ([]float64, error)
+	EmbedImage(ctx context.Context, data []byte) ([]float64, error)
 }
 
 type SearchResult struct {
@@ -17,8 +17,8 @@ type SearchResult struct {
 }
 
 type VectorIndex interface {
-	Insert(ctx context.Context, id string, vector []float32) error
-	Search(ctx context.Context, vector []float32, k int) ([]SearchResult, error)
+	Insert(ctx context.Context, id string, vector []float64) error
+	Search(ctx context.Context, vector []float64, k int) ([]SearchResult, error)
 	Delete(ctx context.Context, id string) error
 }
 

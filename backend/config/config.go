@@ -43,22 +43,23 @@ type (
 		Addr         string        `yaml:"addr"`        // "host:port"
 		Password     string        `yaml:"password"`    // optional
 		DB           int           `yaml:"db"`          // 0 by default
-		DialTimeout  time.Duration `yaml:"dialTimeout"` // connection timeout
+		DialTimeout  time.Duration `yaml:"dialTimeout"` 
 		ReadTimeout  time.Duration `yaml:"readTimeout"`
 		WriteTimeout time.Duration `yaml:"writeTimeout"`
 		PoolSize     int           `yaml:"poolSize"`
 	}
 
 	Clip struct {
-		BaseURL     string        `yaml:"baseURL"`     // http://clip-service:8000
-		Timeout     time.Duration `yaml:"timeout"`     // request timeout
-		MaxIdleConn int           `yaml:"maxIdleConn"` // optional pool tuning
+		Host        string        `yaml:"host"`        // clip-service
+		Port        uint16        `yaml:"port"`        // 9000
+		Timeout     time.Duration `yaml:"timeout"`     
+		MaxIdleConn int           `yaml:"maxIdleConn"` // optional 
 	}
 
 	Faiss struct {
-		Host     string        `yaml:"host"`     // faiss-service
-		Port     uint16        `yaml:"port"`     // 9000
-		Timeout  time.Duration `yaml:"timeout"`
+		Host    string        `yaml:"host"` // faiss-service
+		Port    uint16        `yaml:"port"` // 9000
+		Timeout time.Duration `yaml:"timeout"`
 	}
 
 	Log struct {

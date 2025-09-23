@@ -36,7 +36,7 @@ type App struct {
 func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, error) {
 	redisCache := redisadapter.NewClient(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
 
-	clipClient := clipadapter.NewClient(cfg.Clip.BaseURL)
+	clipClient := clipadapter.NewClient(cfg.Clip)
 
 	faissClient := faissadapter.NewClient(cfg.Faiss)
 
