@@ -3,7 +3,7 @@ package faissdto
 
 type VectorAddRequest struct {
 	ID        string    `json:"id"`
-	Vector    []float32 `json:"vector"`
+	Vector    []float64 `json:"vector"`
 	Normalize bool      `json:"normalize"`
 }
 
@@ -27,7 +27,7 @@ type VectorDeleteResponse struct {
 }
 
 type VectorSearchRequest struct {
-	Vector    []float32 `json:"vector"`
+	Vector    []float64 `json:"vector"`
 	K         int       `json:"k"`
 	Normalize bool      `json:"normalize"`
 }
