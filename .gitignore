@@ -1,4 +1,6 @@
 bin/
+data/
+seaweed_data/
 
 timeweb
 timeweb.pub
