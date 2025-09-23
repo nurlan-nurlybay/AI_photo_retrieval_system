@@ -42,7 +42,7 @@ def add(id: str, vector: List[float], normalize: bool = True) -> dict[str, Any]:
     _ensure_index(vec.shape[1])         # 2. if no FAISS index exists yet, build one with correct dim
 
     if vec.shape[1] != DIM:             # 3. sanity check — reject if dims don’t match index
-        raise ValueError(...)
+        raise ValueError(f"vector_dim_mismatch: expected {DIM}, got {vec.shape[1]}")  
     if normalize:                       # 4. optional L2-normalize vector (needed for cosine sim)
         vec = _normalize(vec)
 
