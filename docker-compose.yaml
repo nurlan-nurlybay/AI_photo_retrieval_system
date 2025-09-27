@@ -1,78 +1,54 @@
+version: "3.9"
+
+name: ai-photo-retrieval
+
 services:
-  backend:
+  ml_service:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: photo-backend
+      context: ./ml_service
+    container_name: ml-service
     ports:
-      - "8088:8080"
+      - "8003:8003"
+    # If you don't have any env vars, either remove 'environment' entirely or leave it as an empty map:
+    environment: {}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8003/docs"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [clip-net]
+
+  vector_service:
+    build:
+      context: ./vector_service
+    container_name: vector-service
+    ports:
+      - "8002:8002"
+    environment: {}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8002/docs"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [clip-net]
+
+  temp_webapp:
+    build:
+      context: ./temp_webapp
+    container_name: temp-webapp
+    ports:
+      - "5000:5000"
+    environment:
+      ML_URL: "http://ml_service:8003"
+      VS_URL: "http://vector_service:8002"
     depends_on:
-      - postgres
-      # - redis
-      # - clip_service
-      # - faiss_service
-    environment:
-      - CONFIG=config.yaml
-    networks:
-      - ai_net
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: media_postgres
-    restart: always
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: media
-    ports:
-      - "5432:5432"
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-    networks:
-      - ai_net
-
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: redis
-  #   ports:
-  #     - "6379:6379"
-  #   networks:
-  #     - ai_net
-
-  # clip_service:
-  #   build: ./ml_service
-  #   container_name: clip-service
-  #   ports:
-  #     - "8001:8001"
-  #   networks:
-  #     - ai_net
-
-  # faiss_service:
-  #   build: ./vector_service
-  #   container_name: faiss-service
-  #   ports:
-  #     - "8002:8002"
-  #   networks:
-  #     - ai_net
-
-  seaweedfs:
-    image: chrislusf/seaweedfs:latest
-    container_name: seaweedfs
-    command: "server -dir=/data -s3 -ip=0.0.0.0 -volume.publicUrl=localhost:8080"
-    ports:
-      - "9333:9333"   # master
-      - "8080:8080"   # volume
-      - "8333:8333"   # s3
-    volumes:
-      - ./seaweed_data:/data
-    networks:
-      - ai_net
-
-
-
-volumes:
-  pg_data:
+      - ml_service
+      - vector_service
+    restart: unless-stopped
+    networks: [clip-net]
 
 networks:
-  ai_net:
-    driver: bridge
+  clip-net:
+    name: clip-net
