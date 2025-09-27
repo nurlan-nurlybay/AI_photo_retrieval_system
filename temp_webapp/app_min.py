@@ -1,9 +1,10 @@
 # app_min.py
-from flask import Flask, request, render_template_string, redirect
+import os
 import requests
+from flask import Flask, request, render_template_string, redirect
 
-ML = "http://localhost:8003"   # CLIP service (text+image encode)  ← README uses 8003
-VS = "http://localhost:8002"   # Vector service (FAISS add/search)
+ML = os.getenv("ML_URL", "http://ml_service:8003")
+VS = os.getenv("VS_URL", "http://vector_service:8002")
 
 TEMPLATE = """
 <!doctype html>
