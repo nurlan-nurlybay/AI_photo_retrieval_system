@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
@@ -57,6 +58,44 @@ func (c *Client) EmbedText(ctx context.Context, text string) ([]float64, error) 
 
 }
 
-func (c *Client) EmbedImage(ctx context.Context, data []byte) ([]float64, error) {
-	return nil, errors.New("not implemented")
+func (c *Client) EmbedImage(ctx context.Context, data []byte, filename string) ([]float64, error) {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		return nil, fmt.Errorf("create form file: %w", err)
+	}
+	if _, err := part.Write(data); err != nil {
+		return nil, fmt.Errorf("write file: %w", err)
+	}
+	writer.Close()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/v1/encode/image", &buf)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("post request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("python service returned %s", resp.Status)
+	}
+
+	var respBody struct {
+		Vector []float64 `json:"vector"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	if len(respBody.Vector) != 512 {
+		return nil, errors.New("invalid vector length")
+	}
+
+	return respBody.Vector, nil
 }

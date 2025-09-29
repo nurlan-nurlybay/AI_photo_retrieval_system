@@ -2,26 +2,26 @@
 package faissdto
 
 type VectorAddRequest struct {
-	ID        string    `json:"id"`
+	ID        int64     `json:"id"`
 	Vector    []float64 `json:"vector"`
 	Normalize bool      `json:"normalize"`
 }
 
 type VectorAddResponse struct {
 	Ok       bool    `json:"ok"`
-	ID       string  `json:"id"`
+	ID       int64   `json:"id"`
 	Replaced bool    `json:"replaced"`
 	Dim      *int    `json:"dim,omitempty"`
 	Error    *string `json:"error,omitempty"`
 }
 
 type VectorDeleteRequest struct {
-	ID string `json:"id"`
+	ID int64 `json:"id"`
 }
 
 type VectorDeleteResponse struct {
 	Ok      bool    `json:"ok"`
-	ID      *string `json:"id,omitempty"`
+	ID      *int64  `json:"id,omitempty"`
 	Deleted *bool   `json:"deleted,omitempty"`
 	Error   *string `json:"error,omitempty"`
 }
@@ -33,7 +33,7 @@ type VectorSearchRequest struct {
 }
 
 type SearchResult struct {
-	ID    string  `json:"id"`
+	ID    int64   `json:"id"`
 	Score float64 `json:"score"`
 }
 
