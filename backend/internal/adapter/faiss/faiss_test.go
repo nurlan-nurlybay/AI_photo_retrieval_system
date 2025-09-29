@@ -12,7 +12,7 @@ const baseURL = "http://localhost:8002/v1/vectors"
 func TestFaissIntegration(t *testing.T) {
 	// Insert media_1
 	vec1 := map[string]any{
-		"id":     "media_1",
+		"id":     1,
 		"vector": []float32{0.1, 0.2, 0.3, 0.4, 0.5},
 	}
 	if err := postJSON(baseURL+"/add", vec1); err != nil {
@@ -22,7 +22,7 @@ func TestFaissIntegration(t *testing.T) {
 
 	// Insert media_2
 	vec2 := map[string]any{
-		"id":     "media_2",
+		"id":     2,
 		"vector": []float32{0.11, 0.19, 0.29, 0.41, 0.52},
 	}
 	if err := postJSON(baseURL+"/add", vec2); err != nil {
@@ -33,7 +33,7 @@ func TestFaissIntegration(t *testing.T) {
 	// Search should return media_1 first
 	results := searchVectors(t, []float32{0.1, 0.2, 0.3, 0.4, 0.5}, 2)
 	t.Logf("Initial search results: %+v", results)
-	if results[0].ID != "media_1" {
+	if results[0].ID != 1 {
 		t.Errorf("expected media_1, got %q", results[0].ID)
 	}
 
@@ -52,13 +52,13 @@ func TestFaissIntegration(t *testing.T) {
 	// Search again → top hit should not be media_1
 	results = searchVectors(t, []float32{0.1, 0.2, 0.3, 0.4, 0.5}, 2)
 	t.Logf("Post-delete search results: %+v", results)
-	if results[0].ID == "media_1" {
+	if results[0].ID == 1 {
 		t.Errorf("expected media_1 gone, got %q", results[0].ID)
 	}
 
 	// Insert duplicate ID media_2 with new vector
 	vec2Update := map[string]any{
-		"id":     "media_2",
+		"id":     2,
 		"vector": []float32{0.9, 0.9, 0.9, 0.9, 0.9},
 	}
 	if err := postJSON(baseURL+"/add", vec2Update); err != nil {
@@ -69,7 +69,7 @@ func TestFaissIntegration(t *testing.T) {
 	// Search near [0.9 …] → should hit media_2
 	results = searchVectors(t, []float32{0.9, 0.9, 0.9, 0.9, 0.9}, 1)
 	t.Logf("Duplicate update search results: %+v", results)
-	if results[0].ID != "media_2" {
+	if results[0].ID != 2 {
 		t.Errorf("expected media_2, got %q", results[0].ID)
 	}
 
@@ -109,7 +109,7 @@ func postJSONResp(url string, body map[string]any, out any) error {
 }
 
 type SearchResult struct {
-	ID    string  `json:"id"`
+	ID    int64   `json:"id"`
 	Score float64 `json:"score"`
 }
 
