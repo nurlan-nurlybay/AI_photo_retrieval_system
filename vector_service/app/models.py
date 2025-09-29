@@ -3,13 +3,13 @@ from typing import List, Optional
 
 # ---------- Add ----------
 class VectorAddRequest(BaseModel):
-    id: str
+    id: int
     vector: List[float]
     normalize: bool = True
 
 class VectorAddResponse(BaseModel):
     ok: bool
-    id: str
+    id: int
     replaced: bool = False
     dim: Optional[int] = None
     error: Optional[str] = None
@@ -18,7 +18,7 @@ class VectorAddResponse(BaseModel):
 # ---------- Delete ----------
 class VectorDeleteResponse(BaseModel):
     ok: bool
-    id: Optional[str] = None
+    id: Optional[int] = None
     deleted: Optional[bool] = None
     error: Optional[str] = None
 
@@ -30,7 +30,7 @@ class VectorSearchRequest(BaseModel):
     normalize: bool = True
 
 class SearchResult(BaseModel):
-    id: str
+    id: int
     score: float
 
 class VectorSearchResponse(BaseModel):
