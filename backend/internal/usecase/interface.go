@@ -8,22 +8,22 @@ import (
 
 type Embedder interface {
 	EmbedText(ctx context.Context, text string) ([]float64, error)
-	EmbedImage(ctx context.Context, data []byte) ([]float64, error)
+	EmbedImage(ctx context.Context, data []byte, filename string) ([]float64, error)
 }
 
 type SearchResult struct {
-	ID    string
+	ID    int64
 	Score float64
 }
 
 type VectorIndex interface {
-	Insert(ctx context.Context, id string, vector []float64) error
+	Insert(ctx context.Context, id int64, vector []float64) error
 	Search(ctx context.Context, vector []float64, k int) ([]SearchResult, error)
-	Delete(ctx context.Context, id string) error
+	Delete(ctx context.Context, id int64) error
 }
 
 type MediaRepo interface {
-	FindByIDs(ctx context.Context, deviceID string, ids []string) ([]domain.Media, error)
+	FindByIDs(ctx context.Context, deviceID string, ids []int64) ([]domain.Media, error)
 }
 
 // TODO: remove if not needed

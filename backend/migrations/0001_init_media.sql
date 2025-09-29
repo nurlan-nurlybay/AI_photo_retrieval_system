@@ -1,15 +1,14 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
+-- id BIGSERIAL if you need int64 for FAISS; or UUID if you prefer
 CREATE TABLE IF NOT EXISTS media (
-  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),          -- or pass your own string ids
-  device_id  text NOT NULL,
-  url        text NOT NULL,
-  thumb_url  text,                                                -- nullable for now
-  created_at timestamptz NOT NULL DEFAULT now(),
-  deleted    boolean NOT NULL DEFAULT false,
-
-  CONSTRAINT url_nonempty CHECK (length(url) > 0)
+  id         BIGSERIAL PRIMARY KEY,
+  device_id  TEXT, -- NULL for MVP
+  url        TEXT NOT NULL,
+  thumb_url  TEXT,
+  label      TEXT,
+  deleted    BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_media_device_created   ON media (device_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_media_deleted_created  ON media (deleted, created_at DESC);
+-- If you query by device_id+id combos a lot:
+CREATE INDEX IF NOT EXISTS idx_media_device_created ON media (device_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_media_device_id ON media (device_id, id);

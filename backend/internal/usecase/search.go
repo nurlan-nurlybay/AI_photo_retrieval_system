@@ -31,7 +31,7 @@ func (s *SearchUsecase) SearchByText(ctx context.Context, deviceID, text string,
 		return nil, err
 	}
 
-	var ids []string
+	var ids []int64
 	for _, r := range results {
 		ids = append(ids, r.ID)
 	}
