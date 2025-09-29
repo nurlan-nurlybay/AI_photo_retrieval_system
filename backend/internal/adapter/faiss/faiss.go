@@ -28,7 +28,7 @@ func NewClient(cfg config.Faiss) usecase.VectorIndex {
 	}
 }
 
-func (c *Client) Insert(ctx context.Context, id string, vector []float64) error {
+func (c *Client) Insert(ctx context.Context, id int64, vector []float64) error {
 	req := faissdto.VectorAddRequest{
 		ID:        id,
 		Vector:    vector,
@@ -104,7 +104,7 @@ func (c *Client) Search(ctx context.Context, vector []float64, k int) ([]usecase
 	return results, nil
 }
 
-func (c *Client) Delete(ctx context.Context, id string) error {
+func (c *Client) Delete(ctx context.Context, id int64) error {
 	req := faissdto.VectorDeleteRequest{ID: id}
 
 	body, err := json.Marshal(req)
