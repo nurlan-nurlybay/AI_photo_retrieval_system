@@ -12,7 +12,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8002
 ```bash
 curl -X POST http://localhost:8002/v1/vectors/add \
   -H "Content-Type: application/json" \
-  -d '{"id":"media_1","vector":[0.1,0.2,0.3,0.4,0.5]}'
+  -d '{ "namespace": "dataset:cifar10", "id": 123, "vector": [0.1, 0.2, ...] }'
 ```
 ```bash
 curl -X POST http://localhost:8002/v1/vectors/add \
@@ -25,7 +25,8 @@ curl -X POST http://localhost:8002/v1/vectors/add \
 ```bash
 curl -X POST http://localhost:8002/v1/vectors/search \
   -H "Content-Type: application/json" \
-  -d '{"vector":[0.1,0.2,0.3,0.4,0.5],"k":2}'
+  -d '{ "namespace": "dataset:cifar10", "vector": [0.1, 0.2, ...], "k": 20 }
+'
 ```
 - Distance is cosine similarity (because vectors are L2-normalized and we use Inner Product).
 - Switch to L2 by setting METRIC=l2 in env 
