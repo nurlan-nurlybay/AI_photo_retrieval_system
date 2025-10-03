@@ -3,51 +3,49 @@ version: "3.9"
 name: ai-photo-retrieval
 
 services:
-  ml_service:
-    build:
-      context: ./ml_service
-    container_name: ml-service
-    ports:
-      - "8003:8003"
-    # If you don't have any env vars, either remove 'environment' entirely or leave it as an empty map:
-    environment: {}
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8003/docs"]
-      interval: 10s
-      timeout: 3s
-      retries: 10
-    restart: unless-stopped
-    networks: [clip-net]
-
-  vector_service:
-    build:
-      context: ./vector_service
-    container_name: vector-service
-    ports:
-      - "8002:8002"
-    environment: {}
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8002/docs"]
-      interval: 10s
-      timeout: 3s
-      retries: 10
-    restart: unless-stopped
-    networks: [clip-net]
-
-  temp_webapp:
-    build:
-      context: ./temp_webapp
-    container_name: temp-webapp
-    ports:
-      - "5000:5000"
+  api:
+    build: ./api
+    container_name: api-gateway
+    ports: ["8080:8080"]
     environment:
       ML_URL: "http://ml_service:8003"
       VS_URL: "http://vector_service:8002"
-    depends_on:
-      - ml_service
-      - vector_service
-    restart: unless-stopped
+      # SeaweedFS
+      FILER_URL: "http://seaweedfs:8888"
+      # What URL the client should use to download images:
+      PUBLIC_IMAGE_BASE: "http://localhost:8888"
+      META_PATH: "/data/metadata_store.json"
+    volumes:
+      - ./api_data:/data            # persist metadata JSON
+    depends_on: [ml_service, vector_service, seaweedfs]
     networks: [clip-net]
+
+  ml_service:
+    build: ./ml_service
+    container_name: ml-service
+    expose: ["8003"]
+    networks: [clip-net]
+
+  vector_service:
+    build: ./vector_service
+    container_name: vector-service
+    expose: ["8002"]
+    networks: [clip-net]
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweedfs
+    command: "server -dir=/data -volume.max=10 -filer -s3"
+    ports:
+      - "9333:9333"   # master (optional)
+      - "8888:8888"   # filer (HTTP file API)  <-- keep this
+      - "8333:8333"   # S3 gateway (optional)
+      - "18080:18080" # volume UI (optional)
+    # - "8080:8080" # <-- REMOVE this; it conflicts with your API
+    volumes:
+      - ./seaweed-data:/data
+    networks: [clip-net]
+
 
 networks:
   clip-net:

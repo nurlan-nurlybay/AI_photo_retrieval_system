@@ -1,20 +1,24 @@
 # ml_service/Dockerfile
 FROM python:3.12-slim
 
-# Pillow needs image libs; curl helps healthchecks/logs
+# Pillow needs image libs; curl for healthchecks
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg62-turbo-dev zlib1g-dev libpng-dev curl && \
     rm -rf /var/lib/apt/lists/*
 
+# Helpful pip settings
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=180
+
 WORKDIR /app
 
-# Layer cache: install deps first
+# Install deps first (cache layer)
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --timeout 180 -r requirements.txt
 
-# Copy your FastAPI app (expects app/main.py etc.)
+# Copy code
 COPY app /app/app
 
-# The service must listen on 0.0.0.0:8003
 EXPOSE 8003
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003"]
+CMD ["python","-m","uvicorn","app.main:app","--host","0.0.0.0","--port","8003"]
