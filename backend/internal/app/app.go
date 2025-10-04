@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	clipadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/clip"
 	faissadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss"
@@ -49,10 +48,9 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	log.Info("connected to postgres")
 
 	searchUC := usecase.NewSearchUsecase(clipClient, faissClient, pgRepo)
+	imgUC := usecase.NewImageUploadUsecasae()
 
-	v := validator.New()
-	searchHandler := httpdelivery.NewSearchHandler(searchUC, v, log)
-	router := httpdelivery.SetupRoutes(searchHandler)
+	router := httpdelivery.SetupRoutes(searchUC, imgUC, log)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", cfg.HTTP.Host, cfg.HTTP.Port),
