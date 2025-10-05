@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	clipadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/clip"
 	faissadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss"
@@ -41,10 +42,20 @@ func main() {
 	faissClient := faissadapter.NewClient(cfg.Faiss)
 
 	ctx := context.Background()
-	pgRepo, err := postgresadapter.NewMediaRepository(ctx, cfg.Postgres.DSN())
+	pgxCfg, err := pgxpool.ParseConfig(cfg.Postgres.DSN())
 	if err != nil {
-		log.Fatal("failed to connect to postgres: %v", err)
+		log.Fatal("parse pgx config: %v", err)
 	}
+
+	dbpool, err := pgxpool.NewWithConfig(context.Background(), pgxCfg)
+	if err != nil {
+		log.Fatal("connect postgres: %v", err)
+	}
+	defer dbpool.Close()
+
+	log.Info("connected to postgres")
+
+	pgRepo := postgresadapter.NewMediaPG(dbpool)
 
 	files := []string{}
 	err = filepath.Walk(datasetPath, func(path string, info os.FileInfo, err error) error {
