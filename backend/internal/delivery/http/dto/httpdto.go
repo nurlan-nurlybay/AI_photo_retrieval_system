@@ -4,17 +4,17 @@ import "mime/multipart"
 
 // Search
 type SearchTextRequest struct {
-	UserID string `form:"user_id" binding:"required,uuid4"`
+	UserID int64  `form:"user_id" binding:"required"`
 	Query  string `form:"q" binding:"required,min=2,max=200"`
 }
 
 type SearchImageRequest struct {
-	UserID string `form:"user_id" binding:"required,uuid4"`
+	UserID int64 `form:"user_id" binding:"required"`
 }
 
 type MediaResponse struct {
-	ID       string `json:"id"`
-	UserID   string `json:"user_id"`
+	ID       int64  `json:"id"`
+	UserID   int64  `json:"user_id"`
 	URL      string `json:"url"`
 	ThumbURL string `json:"thumb_url"`
 }
@@ -44,7 +44,7 @@ type UploadResult struct {
 }
 
 type UploadItem struct {
-	ID        string `json:"id"`
+	ID        int64  `json:"id"`
 	URL       string `json:"url"`
 	ThumbURL  string `json:"thumbURL"`
 	MimeType  string `json:"mimeType"`
