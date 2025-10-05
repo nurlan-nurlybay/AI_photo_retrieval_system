@@ -9,10 +9,10 @@ import (
 type SearchUsecase struct {
 	embedder    Embedder
 	vectorIndex VectorIndex
-	mediaRepo   MediaRepo
+	mediaRepo   domain.MediaRepository
 }
 
-func NewSearchUsecase(embedder Embedder, vectorIndex VectorIndex, mediaRepo MediaRepo) *SearchUsecase {
+func NewSearchUsecase(embedder Embedder, vectorIndex VectorIndex, mediaRepo domain.MediaRepository) *SearchUsecase {
 	return &SearchUsecase{
 		embedder:    embedder,
 		vectorIndex: vectorIndex,
@@ -20,7 +20,7 @@ func NewSearchUsecase(embedder Embedder, vectorIndex VectorIndex, mediaRepo Medi
 	}
 }
 
-func (s *SearchUsecase) SearchByText(ctx context.Context, deviceID, text string, k int) ([]domain.Media, error) {
+func (s *SearchUsecase) SearchByText(ctx context.Context, deviceID, text string, k int) ([]*domain.Media, error) {
 	embedding, err := s.embedder.EmbedText(ctx, text)
 	if err != nil {
 		return nil, err
@@ -36,16 +36,14 @@ func (s *SearchUsecase) SearchByText(ctx context.Context, deviceID, text string,
 		ids = append(ids, r.ID)
 	}
 
-	medias, err := s.mediaRepo.FindByIDs(ctx, deviceID, ids)
-	if err != nil {
-		return nil, err
-	}
-
-	var result []domain.Media
-	for _, media := range medias {
-		if media.IsActive() {
-			result = append(result, media)
+	var result []*domain.Media
+	for _, id := range ids {
+		media, err := s.mediaRepo.Get(ctx, domain.UserID(deviceID), domain.MediaID(id))
+		if err != nil {
+			return nil, err
 		}
+		result = append(result, media)
+
 	}
 
 	return result, nil

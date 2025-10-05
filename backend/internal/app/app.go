@@ -12,6 +12,7 @@ import (
 	clipadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/clip"
 	faissadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss"
 	postgresadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/postgres"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
 
 	// redisadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/redis"
 	httpdelivery "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/delivery/http"
@@ -23,8 +24,7 @@ import (
 type App struct {
 	Logger *logger.Logger
 
-	MediaRepo usecase.MediaRepo
-	Cache     usecase.Cache
+	MediaRepo domain.MediaRepository
 	VectorDB  usecase.VectorIndex
 	Embedder  usecase.Embedder
 	SearchUC  *usecase.SearchUsecase
@@ -48,7 +48,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	log.Info("connected to postgres")
 
 	searchUC := usecase.NewSearchUsecase(clipClient, faissClient, pgRepo)
-	imgUC := usecase.NewImageUploadUsecasae()
+	imgUC := usecase.NewUploadeUsecase()
 
 	router := httpdelivery.SetupRoutes(searchUC, imgUC, log)
 
