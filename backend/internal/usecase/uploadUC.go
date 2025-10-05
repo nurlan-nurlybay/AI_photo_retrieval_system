@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"time"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
@@ -67,7 +66,6 @@ func NewMediaService(
 	}
 }
 
-// UploadBatch skeleton: read, checksum, optional dedup, process, persist.
 func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInput) ([]ucdto.UploadResult, error) {
 	out := make([]ucdto.UploadResult, 0, len(items))
 
@@ -148,7 +146,6 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 	return out, nil
 }
 
-// Delete skeleton: delegate to repo. Optionally delete blobs if you keep keys.
 func (s *mediaService) Delete(ctx context.Context, userID domain.UserID, id domain.MediaID) error {
 	// Optional: fetch first to know storage keys, then delete from store.
 	_, err := s.repo.Get(ctx, userID, id)
@@ -191,7 +188,6 @@ func (s *mediaService) List(
 	return items, total, nil
 }
 
-// Helper: map MIME to lightweight file format label.
 func extFromMime(mt string) string {
 	switch mt {
 	case "image/jpeg":
@@ -201,14 +197,8 @@ func extFromMime(mt string) string {
 	case "image/heic", "image/heif":
 		return "heic"
 	default:
-		return ""
+		return "unsupported media type"
 	}
 }
 
-// Compile-time check that mediaService implements MediaService.
 var _ MediaService = (*mediaService)(nil)
-
-// Errors you might want to expose from usecase (optional).
-var (
-	ErrUnsupportedType = errors.New("unsupported media type")
-)

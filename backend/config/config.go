@@ -40,20 +40,20 @@ type (
 	}
 
 	Redis struct {
-		Addr         string        `yaml:"addr"`        // "host:port"
-		Password     string        `yaml:"password"`    // optional
-		DB           int           `yaml:"db"`          // 0 by default
-		DialTimeout  time.Duration `yaml:"dialTimeout"` 
+		Addr         string        `yaml:"addr"`     // "host:port"
+		Password     string        `yaml:"password"` // optional
+		DB           int           `yaml:"db"`       // 0 by default
+		DialTimeout  time.Duration `yaml:"dialTimeout"`
 		ReadTimeout  time.Duration `yaml:"readTimeout"`
 		WriteTimeout time.Duration `yaml:"writeTimeout"`
 		PoolSize     int           `yaml:"poolSize"`
 	}
 
 	Clip struct {
-		Host        string        `yaml:"host"`        // clip-service
-		Port        uint16        `yaml:"port"`        // 9000
-		Timeout     time.Duration `yaml:"timeout"`     
-		MaxIdleConn int           `yaml:"maxIdleConn"` // optional 
+		Host        string        `yaml:"host"` // clip-service
+		Port        uint16        `yaml:"port"` // 9000
+		Timeout     time.Duration `yaml:"timeout"`
+		MaxIdleConn int           `yaml:"maxIdleConn"` // optional
 	}
 
 	Faiss struct {
