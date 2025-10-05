@@ -30,7 +30,7 @@ func (h *SearchHandler) SearchByText(c *gin.Context) {
 		return
 	}
 
-	media, err := h.searchUC.SearchByText(c.Request.Context(), req.DeviceID, req.Query, 10)
+	media, err := h.searchUC.SearchByText(c.Request.Context(), req.UserID, req.Query, 10)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -67,7 +67,7 @@ func (h *SearchHandler) SearchByImage(c *gin.Context) {
 		}
 	}
 
-	media, err := h.searchUC.SearchByImage(c.Request.Context(), req.DeviceID, imgBytes, 10)
+	media, err := h.searchUC.SearchByImage(c.Request.Context(), req.UserID, imgBytes, 10)
 	if err != nil {
 		h.handleError(c, err)
 		return

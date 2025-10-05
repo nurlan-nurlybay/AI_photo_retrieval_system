@@ -1,22 +1,58 @@
 package domain
 
-import "time"
+import (
+	"context"
+	"time"
+)
+
+type MediaID string
+type UserID string
 
 type Media struct {
-	ID        string
-	DeviceID  string
+	ID        MediaID
+	UserID    UserID
 	URL       string
 	ThumbURL  string
-	CreatedAt time.Time
-	Deleted   bool
+	MimeType  string
+	SizeBytes int64
+	Checksum  string    // e.g., SHA256 for dedup
+	CreatedAt time.Time // server insert time
+	Metadata  Metadata
 }
 
-func (m Media) IsActive() bool {
-	return !m.Deleted
+type Metadata struct {
+	DateTimeOriginal *time.Time
+	Orientation      int
+	Width            int
+	Height           int
+	FileFormat       string // "jpeg","png","heic"
+	CameraMake       string
+	CameraModel      string
+	Software         string
 }
 
-type MediaRepo interface {
-	FindByIDs(deviceID string, ids []string) ([]Media, error)
+// Query helpers
+type MediaFilter struct {
+	UserID   *UserID
+	After    *time.Time
+	Before   *time.Time
+	MimeLike []string
+}
+
+type Page struct{ Limit, Offset int }
+type Sort struct {
+	Field string
+	Desc  bool
+}
+
+type MediaRepository interface {
+	Create(ctx context.Context, m *Media) error
+	Delete(ctx context.Context, userID UserID, id MediaID) error
+	Get(ctx context.Context, userID UserID, id MediaID) (*Media, error)
+	List(ctx context.Context, f MediaFilter, p Page, s Sort) ([]*Media, int, error)
+
+	// Optional dedup helpers
+	GetByChecksum(ctx context.Context, userID UserID, checksum string) (*Media, error)
 }
 
 type Embedder interface {

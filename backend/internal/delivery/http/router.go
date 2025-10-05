@@ -12,14 +12,13 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func SetupRoutes(searchH *usecase.SearchUsecase, imgH *usecase.ImageUploadUsecase, l *logger.Logger) *gin.Engine {
+func SetupRoutes(searchH *usecase.SearchUsecase, uploadH usecase.MediaService, l *logger.Logger) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	v := validator.New()
 
 	searchHandler := NewSearchHandler(searchH, v, l)
-	imageUploadHandler := NewImageHandler(imgH, v, l)
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	imageUploadHandler := NewImageHandler(uploadH, v, l)
 
 	// Search routes
 	r.GET("/api/v1/search/text", searchHandler.SearchByText)
@@ -28,6 +27,7 @@ func SetupRoutes(searchH *usecase.SearchUsecase, imgH *usecase.ImageUploadUsecas
 	// Image Upload routes
 	r.POST("/api/v1/upload/image", imageUploadHandler.ImageUpload)
 
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status": "ok",
