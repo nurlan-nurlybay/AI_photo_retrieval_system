@@ -133,12 +133,3 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 }
 
 func rWasDedup(_ ucdto.UploadResult) bool { return false }
-
-type Metadata struct {
-}
-
-func extractExiMetadata(imageBytes []byte) (*Metadata, error) {
-	// exif.RegisterParsers(mknote.All...)
-
-	return nil, nil
-}

@@ -6,21 +6,26 @@ import (
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
 )
 
-type SearchUsecase struct {
+type SearchService interface {
+	SearchByText(ctx context.Context, deviceID, text string, k int) ([]*domain.Media, error)
+	SearchByImage(ctx context.Context, deviceID string, img []byte, k int) ([]domain.Media, error)
+}
+
+type searchService struct {
 	embedder    Embedder
 	vectorIndex VectorIndex
 	mediaRepo   domain.MediaRepository
 }
 
-func NewSearchUsecase(embedder Embedder, vectorIndex VectorIndex, mediaRepo domain.MediaRepository) *SearchUsecase {
-	return &SearchUsecase{
+func NewSearchService(mediaRepo domain.MediaRepository, embedder Embedder, vectorIndex VectorIndex) SearchService {
+	return &searchService{
 		embedder:    embedder,
 		vectorIndex: vectorIndex,
 		mediaRepo:   mediaRepo,
 	}
 }
 
-func (s *SearchUsecase) SearchByText(ctx context.Context, deviceID, text string, k int) ([]*domain.Media, error) {
+func (s *searchService) SearchByText(ctx context.Context, deviceID, text string, k int) ([]*domain.Media, error) {
 	embedding, err := s.embedder.EmbedText(ctx, text)
 	if err != nil {
 		return nil, err
@@ -49,6 +54,6 @@ func (s *SearchUsecase) SearchByText(ctx context.Context, deviceID, text string,
 	return result, nil
 }
 
-func (s *SearchUsecase) SearchByImage(ctx context.Context, deviceID string, img []byte, k int) ([]domain.Media, error) {
+func (s *searchService) SearchByImage(ctx context.Context, deviceID string, img []byte, k int) ([]domain.Media, error) {
 	return nil, domain.ErrSearchFailed
 }

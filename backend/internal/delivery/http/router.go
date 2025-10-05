@@ -12,13 +12,13 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func SetupRoutes(searchH *usecase.SearchUsecase, uploadH usecase.MediaService, l *logger.Logger) *gin.Engine {
+func SetupRoutes(searchSvc usecase.SearchService, uploadSvc usecase.MediaService, l *logger.Logger) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 	v := validator.New()
 
-	searchHandler := NewSearchHandler(searchH, v, l)
-	imageUploadHandler := NewImageHandler(uploadH, v, l)
+	searchHandler := NewSearchHandler(searchSvc, v, l)
+	imageUploadHandler := NewImageHandler(uploadSvc, v, l)
 
 	// Search routes
 	r.GET("/api/v1/search/text", searchHandler.SearchByText)

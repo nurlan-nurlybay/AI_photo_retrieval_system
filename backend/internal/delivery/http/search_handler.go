@@ -12,12 +12,12 @@ import (
 )
 
 type SearchHandler struct {
-	searchUC  *usecase.SearchUsecase
+	searchUC  usecase.SearchService
 	validator *validator.Validate
 	logger    *logger.Logger
 }
 
-func NewSearchHandler(search *usecase.SearchUsecase, validator *validator.Validate, logger *logger.Logger) *SearchHandler {
+func NewSearchHandler(search usecase.SearchService, validator *validator.Validate, logger *logger.Logger) *SearchHandler {
 	return &SearchHandler{searchUC: search, validator: validator, logger: logger}
 }
 
