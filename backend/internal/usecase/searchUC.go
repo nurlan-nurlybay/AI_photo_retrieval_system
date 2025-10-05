@@ -7,8 +7,8 @@ import (
 )
 
 type SearchService interface {
-	SearchByText(ctx context.Context, deviceID, text string, k int) ([]*domain.Media, error)
-	SearchByImage(ctx context.Context, deviceID string, img []byte, k int) ([]domain.Media, error)
+	SearchByText(ctx context.Context, userID int64, text string, k int) ([]*domain.Media, error)
+	SearchByImage(ctx context.Context, userID int64, img []byte, k int) ([]domain.Media, error)
 }
 
 type searchService struct {
@@ -25,7 +25,7 @@ func NewSearchService(mediaRepo domain.MediaRepository, embedder Embedder, vecto
 	}
 }
 
-func (s *searchService) SearchByText(ctx context.Context, deviceID, text string, k int) ([]*domain.Media, error) {
+func (s *searchService) SearchByText(ctx context.Context, userID int64, text string, k int) ([]*domain.Media, error) {
 	embedding, err := s.embedder.EmbedText(ctx, text)
 	if err != nil {
 		return nil, err
@@ -42,8 +42,8 @@ func (s *searchService) SearchByText(ctx context.Context, deviceID, text string,
 	}
 
 	var result []*domain.Media
-	for _, id := range ids {
-		media, err := s.mediaRepo.Get(ctx, domain.UserID(deviceID), domain.MediaID(id))
+	for _, mediaID := range ids {
+		media, err := s.mediaRepo.Get(ctx, userID, mediaID)
 		if err != nil {
 			return nil, err
 		}
@@ -54,6 +54,6 @@ func (s *searchService) SearchByText(ctx context.Context, deviceID, text string,
 	return result, nil
 }
 
-func (s *searchService) SearchByImage(ctx context.Context, deviceID string, img []byte, k int) ([]domain.Media, error) {
+func (s *searchService) SearchByImage(ctx context.Context, deviceID int64, img []byte, k int) ([]domain.Media, error) {
 	return nil, domain.ErrSearchFailed
 }

@@ -61,7 +61,7 @@ func (r *MediaPG) Create(ctx context.Context, m *domain.Media) error {
 }
 
 // Delete removes by user + id for multi-tenant safety.
-func (r *MediaPG) Delete(ctx context.Context, userID domain.UserID, id domain.MediaID) error {
+func (r *MediaPG) Delete(ctx context.Context, userID, id int64) error {
 	q := `DELETE FROM ` + r.table + ` WHERE user_id = $1 AND id = $2`
 	ct, err := r.db.Exec(ctx, q, userID, id)
 	if err != nil {
@@ -74,7 +74,7 @@ func (r *MediaPG) Delete(ctx context.Context, userID domain.UserID, id domain.Me
 }
 
 // Get fetches a single media by user + id.
-func (r *MediaPG) Get(ctx context.Context, userID domain.UserID, id domain.MediaID) (*domain.Media, error) {
+func (r *MediaPG) Get(ctx context.Context, userID, id int64) (*domain.Media, error) {
 	q := `
 		SELECT
 			id, user_id, url, thumb_url, mime_type, size_bytes, checksum,
@@ -97,7 +97,7 @@ func (r *MediaPG) Get(ctx context.Context, userID domain.UserID, id domain.Media
 }
 
 // GetByChecksum fetches by user + checksum for exact-byte dedup.
-func (r *MediaPG) GetByChecksum(ctx context.Context, userID domain.UserID, checksum string) (*domain.Media, error) {
+func (r *MediaPG) GetByChecksum(ctx context.Context, userID int64, checksum string) (*domain.Media, error) {
 	q := `
 		SELECT
 			id, user_id, url, thumb_url, mime_type, size_bytes, checksum,
@@ -171,15 +171,14 @@ func (r *MediaPG) List(ctx context.Context, f domain.MediaFilter, p domain.Page,
 }
 
 /* -------------------- helpers -------------------- */
-
 func scanMedia(row pgx.Row) (*domain.Media, error) {
 	var (
-		id, userID, url, thumbURL, mimeType, checksum string
-		createdAt                                     time.Time
-		takenAt                                       *time.Time
-		width, height, orientation                    int
-		sizeBytes                                     int64
-		fileFormat, make, model, sw                   string
+		url, thumbURL, mimeType, checksum string
+		createdAt                         time.Time
+		takenAt                           *time.Time
+		width, height, orientation        int
+		id, userID, sizeBytes             int64
+		fileFormat, make, model, sw       string
 	)
 
 	err := row.Scan(
@@ -193,8 +192,8 @@ func scanMedia(row pgx.Row) (*domain.Media, error) {
 	}
 
 	m := &domain.Media{
-		ID:        domain.MediaID(id),
-		UserID:    domain.UserID(userID),
+		ID:        id,
+		UserID:    userID,
 		URL:       url,
 		ThumbURL:  thumbURL,
 		MimeType:  mimeType,

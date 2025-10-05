@@ -5,12 +5,9 @@ import (
 	"time"
 )
 
-type MediaID string
-type UserID string
-
 type Media struct {
-	ID        MediaID
-	UserID    UserID
+	ID        int64
+	UserID    int64
 	URL       string
 	ThumbURL  string
 	MimeType  string
@@ -33,7 +30,7 @@ type Metadata struct {
 
 // Query helpers
 type MediaFilter struct {
-	UserID   *UserID
+	UserID   *string
 	After    *time.Time
 	Before   *time.Time
 	MimeLike []string
@@ -47,12 +44,12 @@ type Sort struct {
 
 type MediaRepository interface {
 	Create(ctx context.Context, m *Media) error
-	Delete(ctx context.Context, userID UserID, id MediaID) error
-	Get(ctx context.Context, userID UserID, id MediaID) (*Media, error)
+	Delete(ctx context.Context, uID, mID int64) error
+	Get(ctx context.Context, uID, mID int64) (*Media, error)
 	List(ctx context.Context, f MediaFilter, p Page, s Sort) ([]*Media, int, error)
 
 	// Optional dedup helpers
-	GetByChecksum(ctx context.Context, userID UserID, checksum string) (*Media, error)
+	GetByChecksum(ctx context.Context, uID int64, checksum string) (*Media, error)
 }
 
 type Embedder interface {

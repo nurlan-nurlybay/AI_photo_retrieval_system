@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"time"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
@@ -14,8 +15,8 @@ import (
 
 type MediaService interface {
 	UploadBatch(ctx context.Context, items []ucdto.UploadInput) ([]ucdto.UploadResult, error)
-	Delete(ctx context.Context, userID domain.UserID, id domain.MediaID) error
-	GetByID(ctx context.Context, userID domain.UserID, id domain.MediaID) (*domain.Media, error)
+	Delete(ctx context.Context, userID, id int64) error
+	GetByID(ctx context.Context, userID, id int64) (*domain.Media, error)
 	List(ctx context.Context, f domain.MediaFilter, p domain.Page, s domain.Sort) ([]*domain.Media, int, error)
 }
 
@@ -98,8 +99,8 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 		}
 
 		// 6) Store objects. Keys can be anything deterministic.
-		keyOrig := "media/" + string(it.UserID) + "/" + check + "/original"
-		keyThumb := "media/" + string(it.UserID) + "/" + check + "/thumb.jpg"
+		keyOrig := fmt.Sprintf("media/%d/%s/original", it.UserID, check)
+		keyThumb := fmt.Sprintf("media/%d/%s/thumb.jpg", it.UserID, check)
 
 		origURL, err := s.store.Put(ctx, keyOrig, bytes.NewReader(oriented))
 		if err != nil {
@@ -114,7 +115,6 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 
 		// 7) Build domain model and persist.
 		m := &domain.Media{
-			ID:        domain.MediaID(check), // or uuid, checksum stays a separate column
 			UserID:    it.UserID,
 			URL:       origURL,
 			ThumbURL:  thumbURL,
@@ -146,7 +146,7 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 	return out, nil
 }
 
-func (s *mediaService) Delete(ctx context.Context, userID domain.UserID, id domain.MediaID) error {
+func (s *mediaService) Delete(ctx context.Context, userID, id int64) error {
 	// Optional: fetch first to know storage keys, then delete from store.
 	_, err := s.repo.Get(ctx, userID, id)
 	if err != nil {
@@ -160,7 +160,7 @@ func (s *mediaService) Delete(ctx context.Context, userID domain.UserID, id doma
 }
 
 // GetByID skeleton: pass-through to repo.
-func (s *mediaService) GetByID(ctx context.Context, userID domain.UserID, id domain.MediaID) (*domain.Media, error) {
+func (s *mediaService) GetByID(ctx context.Context, userID, id int64) (*domain.Media, error) {
 	m, err := s.repo.Get(ctx, userID, id)
 	if err != nil {
 		return nil, err

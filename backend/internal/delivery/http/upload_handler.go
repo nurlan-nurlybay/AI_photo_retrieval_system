@@ -9,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	httpdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/delivery/http/dto"
-	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
 	ucdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase/dto"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
@@ -35,9 +34,9 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 	log := h.logger.With("handler", "ImageUpload")
 	log.Info("received req")
 
-	userID := c.GetString("userID")
-	if userID == "" {
-		userID = "demo-user"
+	userID := c.GetInt64("userID")
+	if userID == 0 {
+		userID = 404
 	}
 
 	var req httpdto.UploadRequest
@@ -73,7 +72,7 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 
 		mt := fh.Header.Get("Content-Type")
 		inputs = append(inputs, ucdto.UploadInput{
-			UserID:   domain.UserID(userID),
+			UserID:   userID,
 			Filename: fh.Filename,
 			MimeType: mt,
 			Size:     int64(len(b)),
@@ -94,7 +93,7 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 	for i, r := range results {
 		item := r.Media
 		ui := httpdto.UploadItem{
-			ID:        string(item.ID),
+			ID:        item.ID,
 			URL:       item.URL,
 			ThumbURL:  item.ThumbURL,
 			MimeType:  item.MimeType,
@@ -105,10 +104,7 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 			Checksum:  item.Checksum,
 		}
 
-		status := "saved"
-		if results[i].Media != nil && string(results[i].Media.ID) == string(item.ID) && rWasDedup(r) {
-			status = "duplicate"
-		}
+		status := string(r.Status)
 
 		resp.Results = append(resp.Results, httpdto.UploadResult{
 			Filename: inputs[i].Filename,
@@ -131,5 +127,3 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp)
 }
-
-func rWasDedup(_ ucdto.UploadResult) bool { return false }

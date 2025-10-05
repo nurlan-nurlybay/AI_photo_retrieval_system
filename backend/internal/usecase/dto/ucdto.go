@@ -15,7 +15,7 @@ const (
 )
 
 type UploadInput struct {
-	UserID   domain.UserID
+	UserID   int64
 	Filename string
 	MimeType string
 	Size     int64
