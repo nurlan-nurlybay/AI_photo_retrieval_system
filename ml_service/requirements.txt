@@ -11,4 +11,4 @@ torchvision==0.19.1+cpu
 open-clip-torch==2.24.0
 
 # If you are NOT using Hugging Face Transformers anywhere, keep it removed.
-# transformers==4.44.0  <-- REMOVE unless your code imports it.
+transformers==4.44.0  # <-- REMOVE unless your code imports it.

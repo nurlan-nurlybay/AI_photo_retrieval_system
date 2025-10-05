@@ -1,13 +1,29 @@
-from fastapi import FastAPI, UploadFile, File
-from .models import TextRequest, VectorResponse
-from .clip_service import encode_text, encode_image
+from fastapi import FastAPI, UploadFile, File, Body
+from .models import (
+    TextRequest, VectorResponse,
+    EncodeOptions, ModelName,
+)
+from .clip_service import (
+    encode_text,
+    encode_image
+)
 
 app = FastAPI()
 
-@app.post("/v1/encode/text", response_model=VectorResponse)
-def encode_text_endpoint(req: TextRequest):
-    return {"vector": encode_text(req.text)}
+# ---------- Batch text (JSON body) ----------
+@app.post("/v1/encode/text/", response_model=VectorResponse)
+def encode_text_batch_endpoint(req: TextRequest, options: EncodeOptions = Body(EncodeOptions())) -> VectorResponse:
+    return {"vectors": encode_text(req.texts, options)}
 
-@app.post("/v1/encode/image", response_model=VectorResponse)
-def encode_image_endpoint(file: UploadFile = File(...)):
-    return {"vector": encode_image(file.file.read())}
+
+# ---------- Batch image (multipart + query params) ----------
+@app.post("/v1/encode/image/", response_model=VectorResponse)
+def encode_image_batch_endpoint(files: list[UploadFile] = File(...), model: ModelName = ModelName.vit_b32, normalize: bool = True) -> VectorResponse:
+    options = EncodeOptions(model=model, normalize=normalize)
+    blobs = [f.file.read() for f in files]  # images: list[bytes]
+    return {"vectors": encode_image(blobs, options)}
+
+
+# ---------- Healthcheck ----------
+@app.get("/healthz")
+def healthz(): return {"ok": True}
