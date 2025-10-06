@@ -57,7 +57,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	if err != nil {
 		log.Fatal("failed to connect to seaweedfs:", err)
 	}
-	mediaSvc := usecase.NewMediaService(pgRepo, store, imgProc, metaExt)
+	mediaSvc := usecase.NewMediaService(pgRepo, store, imgProc, metaExt, log)
 
 	// Wire handlers
 	router := httpdelivery.SetupRoutes(searchSvc, mediaSvc, log)
