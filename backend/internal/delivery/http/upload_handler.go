@@ -111,11 +111,28 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 			}
 		}
 
+		var errMsg string
+		if r.Err != nil {
+			errMsg = r.Err.Error()
+			h.logger.Error("upload result contains error",
+				"index", i,
+				"filename", inputs[i].Filename,
+				"status", r.Status,
+				"error", errMsg,
+			)
+		} else if r.Status == ucdto.StatusFailed {
+			h.logger.Error("upload result marked failed but error is nil",
+				"index", i,
+				"filename", inputs[i].Filename,
+				"status", r.Status,
+			)
+		}
+
 		resp.Results = append(resp.Results, httpdto.UploadResult{
 			Filename: inputs[i].Filename,
 			Status:   string(r.Status),
 			Media:    ui,
-			Error:    r.Err.Error(),
+			Error:    errMsg,
 		})
 	}
 
