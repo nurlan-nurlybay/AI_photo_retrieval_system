@@ -11,13 +11,13 @@ import (
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	clipadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/clip"
 	faissadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss"
+	httpadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/http"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/imageproc"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/metadata"
 	postgresadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/postgres"
 	redisadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/redis"
-	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/seaweedfs"
 
-	httpdelivery "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/delivery/http"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/seaweedfs"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
@@ -44,10 +44,18 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	// Prep dependencies
 	pgRepo := postgresadapter.NewMediaPG(pgxpool)
 	clipClient := clipadapter.NewClient(cfg.Clip)
-	faissClient := faissadapter.NewClient(cfg.Faiss)
-	redisClient := redisadapter.NewClient(cfg)
+	faissClient, err := faissadapter.NewClient(ctx, cfg.Faiss)
+	if err != nil {
+		log.Fatal("failed to conn faiss:", err)
+	}
+	redisClient, err := redisadapter.NewClient(ctx, cfg)
+	if err != nil {
+		log.Fatal("failed to conn redis:", err)
+	}
+	log.Info("connected to redis client")
+
 	// TODO: actuall seaweedfs implemnetation
-	// currently store in ./var/uploads/media/1/abc/ 
+	// currently store in ./var/uploads/media/1/abc/
 	store, err := seaweedfs.NewLocalFS("./var/uploads", "http://localhost:8080/uploads")
 	if err != nil {
 		log.Fatal("failed to connect to seaweedfs:", err)
@@ -62,7 +70,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	mediaSvc := usecase.NewMediaService(pgRepo, store, redisClient, imgProc, metaExt, log)
 
 	// Wire handlers
-	router := httpdelivery.SetupRoutes(searchSvc, mediaSvc, log)
+	router := httpadapter.SetupRoutes(searchSvc, mediaSvc, log)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", cfg.HTTP.Host, cfg.HTTP.Port),
