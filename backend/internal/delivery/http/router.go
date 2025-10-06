@@ -21,11 +21,11 @@ func SetupRoutes(searchSvc usecase.SearchService, uploadSvc usecase.MediaService
 	imageUploadHandler := NewImageHandler(uploadSvc, v, l)
 
 	// Search routes
-	r.GET("/api/v1/search/text", searchHandler.SearchByText)
-	r.POST("/api/v1/search/image", searchHandler.SearchByImage)
+	r.GET("/api/search/text", searchHandler.SearchByText)
+	r.POST("/api/search/image", searchHandler.SearchByImage)
 
 	// Image Upload routes
-	r.POST("/api/v1/upload/image", imageUploadHandler.ImageUpload)
+	r.POST("/api/upload/image", imageUploadHandler.ImageUpload)
 
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.GET("/healthz", func(c *gin.Context) {
