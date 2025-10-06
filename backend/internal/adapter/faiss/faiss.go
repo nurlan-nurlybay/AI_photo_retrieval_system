@@ -8,11 +8,20 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	faissdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss/dto"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
 )
+
+// test-only constructor
+func NewClientWithBaseURL(baseURL string, timeout time.Duration) *Client {
+	return &Client{
+		baseURL: baseURL,
+		http:    &http.Client{Timeout: timeout},
+	}
+}
 
 type Client struct {
 	baseURL string
@@ -34,7 +43,7 @@ func NewClient(ctx context.Context, cfg config.Faiss) (usecase.VectorIndex, erro
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/healthz", nil)
 	resp, err := client.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to FAISS service at %w: %w", base, err)
+		return nil, fmt.Errorf("failed to connect to FAISS service at %s: %w", base, err)
 	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

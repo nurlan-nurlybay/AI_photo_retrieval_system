@@ -13,14 +13,6 @@ import (
 
 const baseURL = "http://localhost:8002/v1/vectors"
 
-func makeVec(val float64) []float64 {
-	v := make([]float64, 512)
-	for i := range v {
-		v[i] = val
-	}
-	return v
-}
-
 func TestFaissIntegration(t *testing.T) {
 	// quick health check
 	resp, err := http.Get("http://localhost:8002/v1/healthz")
