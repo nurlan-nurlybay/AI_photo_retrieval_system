@@ -17,7 +17,7 @@ type LocalFS struct {
 	PublicBase string // e.g. "http://localhost:8080/uploads"
 }
 
-// NewLocalFS ensures the root exists
+// NewLocalFS ensures local root exists
 func NewLocalFS(root, publicBase string) (*LocalFS, error) {
 	if root == "" {
 		root = "./var/uploads"
@@ -42,7 +42,7 @@ func (fs *LocalFS) Put(_ context.Context, key string, r *bytes.Reader) (string, 
 		return "", err
 	}
 
-	// Optional: short-circuit if file already exists with same content
+	// short-circuit if file already exists with same content
 	if existsSame(full, r) {
 		return fs.publicURL(safeKey), nil
 	}
@@ -82,7 +82,7 @@ func (fs *LocalFS) Delete(_ context.Context, key string) error {
 	if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	// Best-effort: clean empty parent dirs
+	// TODO: clean empty parent dirs 
 	_ = tryRemoveEmptyParents(filepath.Dir(full), fs.Root)
 	return nil
 }
@@ -102,7 +102,7 @@ func sanitizeKey(key string) (string, error) {
 }
 
 func existsSame(path string, r *bytes.Reader) bool {
-	// fast path: if file missing, no match
+	// if file missing, no match
 	st, err := os.Stat(path)
 	if err != nil {
 		return false

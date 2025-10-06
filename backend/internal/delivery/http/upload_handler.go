@@ -57,7 +57,8 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 	// Map DTO -> usecase inputs
 	inputs := make([]ucdto.UploadInput, 0, len(req.Files))
 	for _, fh := range req.Files {
-		// open once, read into memory for MVP; switch to streaming/tempfile later
+		// read into memory 
+		// TODO: switch to streaming/tempfile 
 		f, err := fh.Open()
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot open file " + fh.Filename})
@@ -112,7 +113,7 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 			Media:    &ui,
 		})
 	}
-	// fill summary
+
 	resp.Summary.Total = len(resp.Results)
 	for _, r := range resp.Results {
 		switch r.Status {

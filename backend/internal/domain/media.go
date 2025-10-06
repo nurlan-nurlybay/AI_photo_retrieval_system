@@ -48,7 +48,7 @@ type MediaRepository interface {
 	Get(ctx context.Context, uID, mID int64) (*Media, error)
 	List(ctx context.Context, f MediaFilter, p Page, s Sort) ([]*Media, int, error)
 
-	// Optional dedup helpers
+	// dedup helper
 	GetByChecksum(ctx context.Context, uID int64, checksum string) (*Media, error)
 }
 

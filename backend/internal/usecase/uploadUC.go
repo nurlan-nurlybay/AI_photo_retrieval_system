@@ -1,4 +1,3 @@
-// usecase/media_service.go
 package usecase
 
 import (
@@ -20,7 +19,6 @@ type MediaService interface {
 	List(ctx context.Context, f domain.MediaFilter, p domain.Page, s domain.Sort) ([]*domain.Media, int, error)
 }
 
-// Dependencies the service needs. Replace with your actual ports.
 type (
 	ObjectStorage interface {
 		Put(ctx context.Context, key string, r *bytes.Reader) (publicURL string, err error)
@@ -71,34 +69,34 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 	out := make([]ucdto.UploadResult, 0, len(items))
 
 	for _, it := range items {
-		// 1) Read all (MVP). Replace with streaming/tempfile later.
+		// Read all inmemory TODO: streaming/tempfile later
 		buf := new(bytes.Buffer)
 		if _, err := buf.ReadFrom(it.Body); err != nil {
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
 			continue
 		}
 
-		// 2) Exact-byte checksum for idempotency.
+		// Exact-byte checksum for idempotency
 		sum := sha256.Sum256(buf.Bytes())
 		check := hex.EncodeToString(sum[:])
 
-		// 3) Dedup per user (best-effort).
+		// Dedup per user (best-effort)
 		if existing, _ := s.repo.GetByChecksum(ctx, it.UserID, check); existing != nil {
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusDuplicate, Media: existing})
 			continue
 		}
 
-		// 4) Extract metadata (best-effort).
+		// Extract metadata (best-effort)
 		meta, _ := s.meta.Extract(buf.Bytes())
 
-		// 5) Auto-orient and make thumb.
+		// Auto-orient and make thumb.
 		oriented, thumb, w, h, err := s.img.Process(buf.Bytes())
 		if err != nil {
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
 			continue
 		}
 
-		// 6) Store objects. Keys can be anything deterministic.
+		// Store objects. Keys can be anything deterministic
 		keyOrig := fmt.Sprintf("media/%d/%s/original", it.UserID, check)
 		keyThumb := fmt.Sprintf("media/%d/%s/thumb.jpg", it.UserID, check)
 
@@ -113,7 +111,7 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 			continue
 		}
 
-		// 7) Build domain model and persist.
+		// Build domain model and persist.
 		m := &domain.Media{
 			UserID:    it.UserID,
 			URL:       origURL,
@@ -147,7 +145,7 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 }
 
 func (s *mediaService) Delete(ctx context.Context, userID, id int64) error {
-	// Optional: fetch first to know storage keys, then delete from store.
+	// fetch first to know storage keys
 	_, err := s.repo.Get(ctx, userID, id)
 	if err != nil {
 		return err
@@ -159,7 +157,6 @@ func (s *mediaService) Delete(ctx context.Context, userID, id int64) error {
 	return s.repo.Delete(ctx, userID, id)
 }
 
-// GetByID skeleton: pass-through to repo.
 func (s *mediaService) GetByID(ctx context.Context, userID, id int64) (*domain.Media, error) {
 	m, err := s.repo.Get(ctx, userID, id)
 	if err != nil {
@@ -168,7 +165,6 @@ func (s *mediaService) GetByID(ctx context.Context, userID, id int64) (*domain.M
 	return m, nil
 }
 
-// List skeleton: pass-through with basic argument validation.
 func (s *mediaService) List(
 	ctx context.Context,
 	f domain.MediaFilter,
