@@ -57,8 +57,8 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 	// Map DTO -> usecase inputs
 	inputs := make([]ucdto.UploadInput, 0, len(req.Files))
 	for _, fh := range req.Files {
-		// read into memory 
-		// TODO: switch to streaming/tempfile 
+		// read into memory
+		// TODO: switch to streaming/tempfile
 		f, err := fh.Open()
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot open file " + fh.Filename})
@@ -92,25 +92,30 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 		Results: make([]httpdto.UploadResult, 0, len(results)),
 	}
 	for i, r := range results {
-		item := r.Media
-		ui := httpdto.UploadItem{
-			ID:        item.ID,
-			URL:       item.URL,
-			ThumbURL:  item.ThumbURL,
-			MimeType:  item.MimeType,
-			SizeBytes: item.SizeBytes,
-			CreatedAt: item.CreatedAt.UTC().Format(time.RFC3339),
-			Width:     item.Metadata.Width,
-			Height:    item.Metadata.Height,
-			Checksum:  item.Checksum,
-		}
+		var ui *httpdto.UploadItem
 
-		status := string(r.Status)
+		if r.Media != nil {
+			item := r.Media
+			ui = &httpdto.UploadItem{
+				ID:        item.ID,
+				URL:       item.URL,
+				ThumbURL:  item.ThumbURL,
+				MimeType:  item.MimeType,
+				SizeBytes: item.SizeBytes,
+				Width:     item.Metadata.Width,
+				Height:    item.Metadata.Height,
+				Checksum:  item.Checksum,
+			}
+			if !item.CreatedAt.IsZero() {
+				ui.CreatedAt = item.CreatedAt.UTC().Format(time.RFC3339)
+			}
+		}
 
 		resp.Results = append(resp.Results, httpdto.UploadResult{
 			Filename: inputs[i].Filename,
-			Status:   status,
-			Media:    &ui,
+			Status:   string(r.Status),
+			Media:    ui,
+			Error:    r.Err.Error(),
 		})
 	}
 

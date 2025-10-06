@@ -24,7 +24,7 @@ func NewMediaPG(db *pgxpool.Pool) *MediaPG {
 	return &MediaPG{
 		db:               db,
 		table:            "media",
-		uniqUserChecksum: "uq_media_user_checksum",
+		uniqUserChecksum: "media_user_checksum_uniq",
 	}
 }
 

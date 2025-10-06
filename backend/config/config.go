@@ -29,14 +29,17 @@ type (
 	}
 
 	Postgres struct {
-		Host            string        `yaml:"host"`
-		Port            uint16        `yaml:"port"`
-		User            string        `yaml:"user"`
-		Password        string        `yaml:"password"`
-		DBName          string        `yaml:"dbname"`
-		MaxOpenConns    int           `yaml:"maxOpenConns"`
-		MaxIdleConns    int           `yaml:"maxIdleConns"`
-		ConnMaxLifetime time.Duration `yaml:"connMaxLifetime"`
+		Host              string        `yaml:"host"`
+		Port              uint16        `yaml:"port"`
+		User              string        `yaml:"user"`
+		Password          string        `yaml:"password"`
+		DBName            string        `yaml:"dbname"`
+		SSLMode           string        `yaml:"sslmode"`      // "disable", "require", "verify-full"		MaxOpenConns      int           `yaml:"maxOpenConns"`
+		MaxOpenConns      int           `yaml:"maxOpenConns"` // total connections in pool
+		MaxIdleConns      int           `yaml:"maxIdleConns"`
+		ConnMaxLifetime   time.Duration `yaml:"connMaxLifetime"`   // recycle after e.g. 1h
+		ConnMaxIdleTime   time.Duration `yaml:"connMaxIdleTime"`   // close idle after e.g. 10m
+		HealthCheckPeriod time.Duration `yaml:"healthCheckPeriod"` // ping interval for pgxpool
 	}
 
 	Redis struct {
@@ -86,11 +89,12 @@ func Load(path string) (*Config, error) {
 
 func (p Postgres) DSN() string {
 	return fmt.Sprintf(
-		"postgres://%s:%s@%s:%d/%s?sslmode=disable",
+		"postgres://%s:%s@%s:%d/%s?sslmode=%s",
 		p.User,
 		p.Password,
 		p.Host,
 		p.Port,
 		p.DBName,
+		p.SSLMode,
 	)
 }

@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	clipadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/clip"
 	faissadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss"
@@ -35,21 +34,14 @@ type App struct {
 }
 
 func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, error) {
-	// Parse pgx config separately
-	pgxCfg, err := pgxpool.ParseConfig(cfg.Postgres.DSN())
+	// Create connection pool and repo
+	pgxpool, err := postgresadapter.InitDB(ctx, cfg)
 	if err != nil {
-		log.Fatal("parse pgx config: %v", err)
+		log.Fatal("failed to connect to postgres:", err)
 	}
-
-	dbpool, err := pgxpool.NewWithConfig(context.Background(), pgxCfg)
-	if err != nil {
-		log.Fatal("connect postgres: %v", err)
-	}
-	defer dbpool.Close()
-
 	log.Info("connected to postgres")
 
-	pgRepo := postgresadapter.NewMediaPG(dbpool)
+	pgRepo := postgresadapter.NewMediaPG(pgxpool)
 
 	// Setup search service
 	clipClient := clipadapter.NewClient(cfg.Clip)
@@ -59,9 +51,11 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	// Setup media service
 	imgProc := imageproc.NewVipsProcessor(512, 85)
 	metaExt := metadata.NewExifExtractor()
+	// TODO: actuall seaweedfs implemnetation
+	// currently store in ./var/uploads/media/1/abc/
 	store, err := seaweedfs.NewLocalFS("./var/uploads", "http://localhost:8080/uploads")
 	if err != nil {
-		log.Fatal("failed to connect to seaweedfs: %w", err)
+		log.Fatal("failed to connect to seaweedfs:", err)
 	}
 	mediaSvc := usecase.NewMediaService(pgRepo, store, imgProc, metaExt)
 
