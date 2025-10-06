@@ -30,13 +30,13 @@ redis:
   poolSize: 10
 
 clip:
-  host: "clip-service"
-  port: 8001
+  host: "localhost"
+  port: 8003
   timeout: 5s
   maxIdleConn: 5
 
 faiss:
-  host: "faiss-service"
+  host: "localhost"
   port: 8002
   protocol: "http"
   timeout: 5s

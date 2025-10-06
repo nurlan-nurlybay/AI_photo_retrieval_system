@@ -12,13 +12,16 @@ type Client struct {
 	rdb *redis.Client
 }
 
-func NewClient(cfg *config.Config) *Client {
+func NewClient(ctx context.Context, cfg *config.Config) (*Client, error) {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     cfg.Redis.Addr,
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 	})
-	return &Client{rdb: rdb}
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		return nil, err
+	}
+	return &Client{rdb: rdb}, nil
 }
 
 func (c *Client) Get(ctx context.Context, key string) (string, error) {

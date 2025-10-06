@@ -44,12 +44,20 @@ func main() {
 	}
 	workerRepo := postgresadapter.NewWorkRepo(pgxpool, store)
 	clipClient := clipadapter.NewClient(cfg.Clip)
-	faissClient := faissadapter.NewClient(cfg.Faiss)
-	redisClient := redisadapter.NewClient(cfg)
+	faissClient, err := faissadapter.NewClient(ctx, cfg.Faiss)
+	if err != nil {
+		log.Fatal("failed to conn faiss:", err)
+	}
+	redisClient, err := redisadapter.NewClient(ctx, cfg)
+	if err != nil {
+		log.Fatal("failed to conn redis:", err)
+	}
+	log.Info("connected to redis client")
 
 	ew := &worker.EmbedWorker{
 		Q: redisClient, Repo: workerRepo, Clip: clipClient, Faiss: faissClient,
 		ModelID: "open_clip:ViT-L/14@336px", QueueKey: "jobs:embed", IdleDelay: 2 * time.Second,
+		Log: log,
 	}
 	rw := &worker.RetryWorker{
 		Repo: workerRepo, Faiss: faissClient,
