@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	faissdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss/dto"
@@ -19,16 +21,34 @@ type Client struct {
 
 var _ usecase.VectorIndex = (*Client)(nil)
 
-func NewClient(cfg config.Faiss) usecase.VectorIndex {
-	return &Client{
-		baseURL: fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port),
+func NewClient(ctx context.Context, cfg config.Faiss) (usecase.VectorIndex, error) {
+	base := fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port)
+
+	client := &Client{
+		baseURL: base,
 		http: &http.Client{
 			Timeout: cfg.Timeout,
 		},
 	}
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/healthz", nil)
+	resp, err := client.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to FAISS service at %w: %w", base, err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("FAISS service unhealthy (status %d)", resp.StatusCode)
+	}
+
+	return client, nil
 }
 
 func (c *Client) Insert(ctx context.Context, id int64, vector []float64) error {
+	if len(vector) == 0 {
+		return fmt.Errorf("cannot insert empty vector for media_id=%d", id)
+	}
+
 	req := faissdto.VectorAddRequest{
 		ID:        id,
 		Vector:    vector,
@@ -53,12 +73,30 @@ func (c *Client) Insert(ctx context.Context, id int64, vector []float64) error {
 	}
 	defer resp.Body.Close()
 
+	// Check HTTP status before decoding
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("faiss insert HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+
+	// Decode JSON normally
 	var out faissdto.VectorAddResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return fmt.Errorf("decode insert response: %w", err)
 	}
+
+	// Safe error dereference
 	if !out.Ok {
-		return fmt.Errorf("faiss insert failed: %v", out.Error)
+		errMsg := ""
+		if out.Error != nil {
+			errMsg = *out.Error
+		}
+		return fmt.Errorf("faiss insert failed: %s", errMsg)
+	}
+
+	// heck for returned dim
+	if out.Dim != nil && *out.Dim != len(vector) {
+		return fmt.Errorf("dimension mismatch: server expects %d but sent %d", *out.Dim, len(vector))
 	}
 
 	return nil
