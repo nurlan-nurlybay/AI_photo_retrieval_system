@@ -82,9 +82,26 @@ func (fs *LocalFS) Delete(_ context.Context, key string) error {
 	if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	// TODO: clean empty parent dirs 
+	// TODO: clean empty parent dirs
 	_ = tryRemoveEmptyParents(filepath.Dir(full), fs.Root)
 	return nil
+}
+
+func (fs *LocalFS) Get(_ context.Context, key string) ([]byte, error) {
+	safeKey, err := sanitizeKey(key)
+	if err != nil {
+		return nil, err
+	}
+	full := filepath.Join(fs.Root, safeKey)
+
+	data, err := os.ReadFile(full)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("file not found: %s", key)
+		}
+		return nil, err
+	}
+	return data, nil
 }
 
 func (fs *LocalFS) publicURL(key string) string {
