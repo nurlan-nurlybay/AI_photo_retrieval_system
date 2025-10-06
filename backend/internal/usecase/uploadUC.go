@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -41,11 +42,16 @@ type (
 		CameraModel      string
 		Software         string
 	}
+
+	Queue interface {
+		Enqueue(ctx context.Context, key string, payload []byte) error
+	}
 )
 
 type mediaService struct {
 	repo  domain.MediaRepository
 	store ObjectStorage
+	queue Queue // wraps Redis
 	img   ImageProcessor
 	meta  MetadataExtractor
 	clock func() time.Time
@@ -55,6 +61,7 @@ type mediaService struct {
 func NewMediaService(
 	repo domain.MediaRepository,
 	store ObjectStorage,
+	queue Queue,
 	img ImageProcessor,
 	meta MetadataExtractor,
 	log *logger.Logger,
@@ -62,10 +69,11 @@ func NewMediaService(
 	return &mediaService{
 		repo:  repo,
 		store: store,
+		queue: queue,
 		img:   img,
 		meta:  meta,
 		clock: time.Now,
-		log: log,
+		log:   log,
 	}
 }
 
@@ -223,6 +231,11 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 			continue
 		}
 
+		//  enqueue embedding job
+		job := ucdto.EmbedJob{MediaID: m.ID, Modality: "image"}
+		b, _ := json.Marshal(job)
+		_ = s.queue.Enqueue(ctx, "jobs:embed", b) // best-effort
+
 		s.log.InfoContext(ctx, "media saved successfully",
 			"index", i,
 			"user_id", it.UserID,
@@ -241,7 +254,6 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 
 	return out, nil
 }
-
 
 func (s *mediaService) Delete(ctx context.Context, userID, id int64) error {
 	// fetch first to know storage keys
