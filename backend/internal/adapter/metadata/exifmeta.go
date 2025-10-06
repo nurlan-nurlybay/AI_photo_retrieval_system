@@ -17,7 +17,7 @@ func (e *ExifExtractor) Extract(buf []byte) (usecase.ExtractedMetadata, error) {
 
 	x, err := exif.Decode(bytes.NewReader(buf))
 	if err != nil {
-		// No EXIF. Not an error for us; return zero meta.
+		// No EXIF. Not an error for us; return zero meta
 		return out, nil
 	}
 
@@ -33,7 +33,7 @@ func (e *ExifExtractor) Extract(buf []byte) (usecase.ExtractedMetadata, error) {
 		}
 	}
 
-	// Orientation (1..8). Default 1 if missing.
+	// Orientation (1..8). Default 1 if missing
 	if tag, err := x.Get(exif.Orientation); err == nil && tag != nil {
 		if ori, err := tag.Int(0); err == nil {
 			out.Orientation = ori

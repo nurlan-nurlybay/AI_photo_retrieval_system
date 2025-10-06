@@ -24,19 +24,19 @@ func NewVipsProcessor(thumbSize, quality int) *VipsProcessor {
 func (p *VipsProcessor) Process(original []byte) (oriented []byte, thumb []byte, width int, height int, err error) {
 	img := bimg.NewImage(original)
 
-	// 1) Auto-rotate by EXIF
+	// Auto-rotate by EXIF (might silently fail)
 	oriented, err = img.AutoRotate()
 	if err != nil {
 		return nil, nil, 0, 0, err
 	}
 
-	// 2) Oriented dimensions
+	// Oriented dimensions
 	size, err := bimg.NewImage(oriented).Size()
 	if err != nil {
 		return nil, nil, 0, 0, err
 	}
 
-	// 3) Square thumbnail, center-cropped
+	// Square thumbnail, center-cropped
 	thumb, err = bimg.NewImage(oriented).Process(bimg.Options{
 		Width:   p.ThumbSize,
 		Height:  p.ThumbSize,

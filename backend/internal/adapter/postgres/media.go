@@ -30,7 +30,6 @@ func NewMediaPG(db *pgxpool.Pool) *MediaPG {
 
 var _ domain.MediaRepository = (*MediaPG)(nil)
 
-// Create inserts a new media row.
 func (r *MediaPG) Create(ctx context.Context, m *domain.Media) error {
 	const q = `
 		INSERT INTO media (
@@ -60,7 +59,6 @@ func (r *MediaPG) Create(ctx context.Context, m *domain.Media) error {
 	return nil
 }
 
-// Delete removes by user + id for multi-tenant safety.
 func (r *MediaPG) Delete(ctx context.Context, userID, id int64) error {
 	q := `DELETE FROM ` + r.table + ` WHERE user_id = $1 AND id = $2`
 	ct, err := r.db.Exec(ctx, q, userID, id)
@@ -73,7 +71,6 @@ func (r *MediaPG) Delete(ctx context.Context, userID, id int64) error {
 	return nil
 }
 
-// Get fetches a single media by user + id.
 func (r *MediaPG) Get(ctx context.Context, userID, id int64) (*domain.Media, error) {
 	q := `
 		SELECT
@@ -96,7 +93,7 @@ func (r *MediaPG) Get(ctx context.Context, userID, id int64) (*domain.Media, err
 	return m, nil
 }
 
-// GetByChecksum fetches by user + checksum for exact-byte dedup.
+// fetches by user + checksum for exact-byte dedup.
 func (r *MediaPG) GetByChecksum(ctx context.Context, userID int64, checksum string) (*domain.Media, error) {
 	q := `
 		SELECT
@@ -119,7 +116,7 @@ func (r *MediaPG) GetByChecksum(ctx context.Context, userID int64, checksum stri
 	return m, nil
 }
 
-// List returns paginated results and the total count.
+// returns paginated results and the total count.
 func (r *MediaPG) List(ctx context.Context, f domain.MediaFilter, p domain.Page, s domain.Sort) ([]*domain.Media, int, error) {
 	where, args := buildWhere(f)
 	order := buildOrder(s)
@@ -170,7 +167,6 @@ func (r *MediaPG) List(ctx context.Context, f domain.MediaFilter, p domain.Page,
 	return list, total, nil
 }
 
-/* -------------------- helpers -------------------- */
 func scanMedia(row pgx.Row) (*domain.Media, error) {
 	var (
 		url, thumbURL, mimeType, checksum string
