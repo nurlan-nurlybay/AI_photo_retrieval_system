@@ -14,9 +14,9 @@ import (
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/imageproc"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/metadata"
 	postgresadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/postgres"
+	redisadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/redis"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/seaweedfs"
 
-	// redisadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/redis"
 	httpdelivery "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/delivery/http"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
@@ -41,23 +41,25 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	}
 	log.Info("connected to postgres")
 
+	// Prep dependencies
 	pgRepo := postgresadapter.NewMediaPG(pgxpool)
-
-	// Setup search service
 	clipClient := clipadapter.NewClient(cfg.Clip)
 	faissClient := faissadapter.NewClient(cfg.Faiss)
-	searchSvc := usecase.NewSearchService(pgRepo, clipClient, faissClient)
-
-	// Setup media service
-	imgProc := imageproc.NewVipsProcessor(512, 85)
-	metaExt := metadata.NewExifExtractor()
+	redisClient := redisadapter.NewClient(cfg)
 	// TODO: actuall seaweedfs implemnetation
-	// currently store in ./var/uploads/media/1/abc/
+	// currently store in ./var/uploads/media/1/abc/ 
 	store, err := seaweedfs.NewLocalFS("./var/uploads", "http://localhost:8080/uploads")
 	if err != nil {
 		log.Fatal("failed to connect to seaweedfs:", err)
 	}
-	mediaSvc := usecase.NewMediaService(pgRepo, store, imgProc, metaExt, log)
+
+	// Image processing libs
+	imgProc := imageproc.NewVipsProcessor(512, 85)
+	metaExt := metadata.NewExifExtractor()
+
+	// Setup app services
+	searchSvc := usecase.NewSearchService(pgRepo, clipClient, faissClient)
+	mediaSvc := usecase.NewMediaService(pgRepo, store, redisClient, imgProc, metaExt, log)
 
 	// Wire handlers
 	router := httpdelivery.SetupRoutes(searchSvc, mediaSvc, log)
