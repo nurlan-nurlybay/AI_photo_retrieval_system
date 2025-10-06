@@ -133,7 +133,8 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 		}
 
 		if err := s.repo.Create(ctx, m); err != nil {
-			// Optionally delete stored blobs on failure.
+			_ = s.store.Delete(ctx, m.URL)
+			_ = s.store.Delete(ctx, m.ThumbURL)
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
 			continue
 		}

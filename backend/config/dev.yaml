@@ -8,14 +8,17 @@ http:
   idleTimeout: 30s
 
 postgres:
-  host: "localhost"
+  host: "172.22.16.1"
   port: 5432
   user: "postgres"
   password: "postgres"
   dbname: "media"
+  sslmode: "disable"
   maxOpenConns: 10
   maxIdleConns: 5
   connMaxLifetime: 1h
+  connMaxIdleTime: 600s
+  healthCheckPeriod: 300s
 
 redis:
   addr: "localhost:6379"
