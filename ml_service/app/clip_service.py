@@ -4,27 +4,58 @@ from transformers import CLIPProcessor, CLIPModel
 from PIL import Image
 from io import BytesIO
 
+from .models import ModelName, EncodeOptions
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").to(device)
-processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-def encode_text(text: str) -> list[float]:
-    inputs = processor(text=[text], return_tensors="pt", padding=True).to(device)
-    with torch.no_grad():
-        vec = model.get_text_features(**inputs)
-    arr = vec[0].cpu().numpy()
+# Cache models & processors by name so we only download/init once
+_MODELS: dict[str, CLIPModel] = {}
+_PROCS: dict[str, CLIPProcessor] = {}
 
-    # L2 normalize
-    arr = arr / np.linalg.norm(arr)
+def _get_model_and_processor(name: ModelName) -> tuple[CLIPModel, CLIPProcessor]:
+    key = name.value
+    m = _MODELS.get(key)
+    p = _PROCS.get(key)
+    if m is None or p is None:
+        m = CLIPModel.from_pretrained(key).to(device)
+        p = CLIPProcessor.from_pretrained(key)
+        _MODELS[key] = m
+        _PROCS[key] = p
+    return m, p
+
+def _l2_normalize(arr: np.ndarray) -> np.ndarray:
+    arr = arr.astype(np.float32, copy=False)
+    n = np.linalg.norm(arr, axis=-1, keepdims=True)
+    n[n == 0] = 1.0
+    return arr / n
+
+# -------- Text (batch) --------
+def encode_text(texts: list[str], opts: EncodeOptions) -> list[list[float]]:
+    """
+    Batch text → embeddings. For a single query, pass ["query"].
+    Returns: list of 512-float vectors, one per input text.
+    """
+    model, processor = _get_model_and_processor(opts.model)
+    inputs = processor(text=texts, return_tensors="pt", padding=True, truncation=True).to(device)
+    with torch.inference_mode():
+        vecs = model.get_text_features(**inputs)  # (B, 512)
+    arr = vecs.detach().cpu().numpy()
+    if opts.normalize:
+        arr = _l2_normalize(arr)
     return arr.tolist()
 
-def encode_image(data: bytes) -> list[float]:
-    img = Image.open(BytesIO(data)).convert("RGB")
-    inputs = processor(images=img, return_tensors="pt").to(device)
-    with torch.no_grad():
-        vec = model.get_image_features(**inputs)
-    arr = vec[0].cpu().numpy()
-
-    # L2 normalize
-    arr = arr / np.linalg.norm(arr)
+# -------- Image (batch) --------
+def encode_image(images: list[bytes], opts: EncodeOptions) -> list[list[float]]:
+    """
+    Batch images → embeddings. For a single image, pass [image_bytes].
+    Returns: list of 512-float vectors, one per image.
+    """
+    model, processor = _get_model_and_processor(opts.model)
+    pil_list = [Image.open(BytesIO(b)).convert("RGB") for b in images]
+    inputs = processor(images=pil_list, return_tensors="pt", padding=True).to(device)
+    with torch.inference_mode():
+        vecs = model.get_image_features(**inputs)  # (B, 512)
+    arr = vecs.detach().cpu().numpy()
+    if opts.normalize:
+        arr = _l2_normalize(arr)
     return arr.tolist()

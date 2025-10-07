@@ -3,7 +3,7 @@ FROM python:3.12-slim
 
 # Pillow needs image libs; curl for healthchecks
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libjpeg62-turbo-dev zlib1g-dev libpng-dev curl && \
+    libjpeg62-turbo-dev zlib1g-dev libpng-dev curl libgomp1 && \
     rm -rf /var/lib/apt/lists/*
 
 # Helpful pip settings
