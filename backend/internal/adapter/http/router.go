@@ -21,7 +21,7 @@ func SetupRoutes(searchSvc usecase.SearchService, uploadSvc usecase.MediaService
 	imageUploadHandler := NewImageHandler(uploadSvc, v, l)
 
 	// Search routes
-	r.GET("/api/search/text", searchHandler.SearchByText)
+	r.POST("/api/search/text", searchHandler.SearchByText)
 	r.POST("/api/search/image", searchHandler.SearchByImage)
 
 	// Image Upload routes
