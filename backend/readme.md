@@ -16,7 +16,6 @@ apply migration:
 goose -dir ./migrations postgres "postgres://postgres:postgres@172.22.16.1:5432/media?sslmode=disable" up
 ```
 
-
 ### Test upload route 
 
 ```bash
@@ -27,3 +26,9 @@ curl -X POST http://localhost:8080/api/upload/image \
   -v
 ```
 
+### Search route
+```bash
+curl -X POST "http://localhost:8080/api/search/text" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":404, "q":"cat pictures"}'
+```

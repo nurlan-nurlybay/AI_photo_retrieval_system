@@ -90,7 +90,8 @@ func (h *SearchHandler) handleError(c *gin.Context, err error) {
 // On error writes the HTTP 400 and returns false
 func BindAndValidate(c *gin.Context, validate *validator.Validate, obj interface{}) bool {
 	if err := c.ShouldBindJSON(obj); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		// c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
 		return false
 	}
 	if err := validate.Struct(obj); err != nil {
