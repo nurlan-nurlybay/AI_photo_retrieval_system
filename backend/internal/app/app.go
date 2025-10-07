@@ -8,14 +8,16 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	clipadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/clip"
 	faissadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss"
+	httpadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/http"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/imageproc"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/metadata"
 	postgresadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/postgres"
+	redisadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/redis"
 
-	// redisadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/redis"
-	httpdelivery "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/delivery/http"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/seaweedfs"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
@@ -24,35 +26,51 @@ import (
 type App struct {
 	Logger *logger.Logger
 
-	MediaRepo usecase.MediaRepo
-	Cache     usecase.Cache
-	VectorDB  usecase.VectorIndex
-	Embedder  usecase.Embedder
-	SearchUC  *usecase.SearchUsecase
+	MediaSvc  usecase.MediaService
+	SearchSvc usecase.SearchService
 
 	server *http.Server
 	// Tracer trace.TracerProvider
 }
 
 func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, error) {
-	// redisCache := redisadapter.NewClient(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
-
-	clipClient := clipadapter.NewClient(cfg.Clip)
-
-	faissClient := faissadapter.NewClient(cfg.Faiss)
-
-	pgRepo, err := postgresadapter.NewMediaRepository(ctx, cfg.Postgres.DSN())
+	// Create connection pool and repo
+	pgxpool, err := postgresadapter.InitDB(ctx, cfg)
 	if err != nil {
-		log.Fatal("failed to connect to postgres: %v", err)
-		return nil, fmt.Errorf("connect postgres: %w", err)
+		log.Fatal("failed to connect to postgres:", err)
 	}
 	log.Info("connected to postgres")
 
-	searchUC := usecase.NewSearchUsecase(clipClient, faissClient, pgRepo)
+	// Prep dependencies
+	pgRepo := postgresadapter.NewMediaPG(pgxpool)
+	clipClient := clipadapter.NewClient(cfg.Clip)
+	faissClient, err := faissadapter.NewClient(ctx, cfg.Faiss)
+	if err != nil {
+		log.Fatal("failed to conn faiss:", err)
+	}
+	redisClient, err := redisadapter.NewClient(ctx, cfg)
+	if err != nil {
+		log.Fatal("failed to conn redis:", err)
+	}
+	log.Info("connected to redis client")
 
-	v := validator.New()
-	searchHandler := httpdelivery.NewSearchHandler(searchUC, v, log)
-	router := httpdelivery.SetupRoutes(searchHandler)
+	// TODO: actuall seaweedfs implemnetation
+	// currently store in ./var/uploads/media/1/abc/
+	store, err := seaweedfs.NewLocalFS("./var/uploads", "http://localhost:8080/uploads")
+	if err != nil {
+		log.Fatal("failed to connect to seaweedfs:", err)
+	}
+
+	// Image processing libs
+	imgProc := imageproc.NewVipsProcessor(512, 85)
+	metaExt := metadata.NewExifExtractor()
+
+	// Setup app services
+	searchSvc := usecase.NewSearchService(pgRepo, clipClient, faissClient)
+	mediaSvc := usecase.NewMediaService(pgRepo, store, redisClient, imgProc, metaExt, log)
+
+	// Wire handlers
+	router := httpadapter.SetupRoutes(searchSvc, mediaSvc, log)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", cfg.HTTP.Host, cfg.HTTP.Port),
@@ -61,12 +79,9 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 
 	return &App{
 		Logger:    log,
-		MediaRepo: pgRepo,
-		// Cache:     redisCache,
-		VectorDB: faissClient,
-		Embedder: clipClient,
-		SearchUC: searchUC,
-		server:   srv,
+		SearchSvc: searchSvc,
+		MediaSvc:  mediaSvc,
+		server:    srv,
 	}, nil
 }
 

@@ -5,19 +5,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	httpdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/delivery/http/dto"
+	httpdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/http/dto"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
 )
 
 type SearchHandler struct {
-	searchUC  *usecase.SearchUsecase
+	searchUC  usecase.SearchService
 	validator *validator.Validate
 	logger    *logger.Logger
 }
 
-func NewSearchHandler(search *usecase.SearchUsecase, validator *validator.Validate, logger *logger.Logger) *SearchHandler {
+func NewSearchHandler(search usecase.SearchService, validator *validator.Validate, logger *logger.Logger) *SearchHandler {
 	return &SearchHandler{searchUC: search, validator: validator, logger: logger}
 }
 
@@ -30,7 +30,7 @@ func (h *SearchHandler) SearchByText(c *gin.Context) {
 		return
 	}
 
-	media, err := h.searchUC.SearchByText(c.Request.Context(), req.DeviceID, req.Query, 10)
+	media, err := h.searchUC.SearchByText(c.Request.Context(), req.UserID, req.Query, 10)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -67,7 +67,7 @@ func (h *SearchHandler) SearchByImage(c *gin.Context) {
 		}
 	}
 
-	media, err := h.searchUC.SearchByImage(c.Request.Context(), req.DeviceID, imgBytes, 10)
+	media, err := h.searchUC.SearchByImage(c.Request.Context(), req.UserID, imgBytes, 10)
 	if err != nil {
 		h.handleError(c, err)
 		return
@@ -90,7 +90,8 @@ func (h *SearchHandler) handleError(c *gin.Context, err error) {
 // On error writes the HTTP 400 and returns false
 func BindAndValidate(c *gin.Context, validate *validator.Validate, obj interface{}) bool {
 	if err := c.ShouldBindJSON(obj); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		// c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
 		return false
 	}
 	if err := validate.Struct(obj); err != nil {
