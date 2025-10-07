@@ -96,12 +96,10 @@ func (c *Client) Insert(ctx context.Context, id int64, vector []float64) error {
 
 	// Safe error dereference
 	if !out.Ok {
-		errMsg := ""
 		if out.Error != nil {
-			errMsg = *out.Error
+			return fmt.Errorf("faiss error: %s", *out.Error)
 		}
-		return fmt.Errorf("faiss insert failed: %s", errMsg)
-	}
+		return fmt.Errorf("faiss returned not ok")	}
 
 	// heck for returned dim
 	if out.Dim != nil && *out.Dim != len(vector) {
