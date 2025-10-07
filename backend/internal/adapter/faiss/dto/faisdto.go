@@ -1,4 +1,3 @@
-// adapter/faiss/faissdto/models.go
 package faissdto
 
 type VectorAddRequest struct {
