@@ -20,7 +20,7 @@ func TestInsert_RealService(t *testing.T) {
 	client := faiss.NewClientWithBaseURL("http://localhost:8002", 5*time.Second)
 
 	// 512-d float64 vector
-	vec := makeVec(0.0001)
+	vec := makeVec(0.0)
 
 	t.Logf("sending vector of length %d", len(vec))
 

@@ -1,6 +1,10 @@
 bin/
 data/
 seaweed_data/
+.venv/
+backend/bin/
+
+
 
 timeweb
 timeweb.pub
