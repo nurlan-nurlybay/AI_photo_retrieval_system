@@ -158,3 +158,8 @@ prettifier.py
 temp.py
 
 seaweed-data/
+
+# docker_dev bullshi
+.devcontainer/
+.vscode/
+docker-compose.dev.yml
