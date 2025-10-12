@@ -2,14 +2,20 @@ package httpdto
 
 import "mime/multipart"
 
-// Search
+// Search Image
 type SearchTextRequest struct {
 	UserID int64  `json:"user_id" binding:"required"`
 	Query  string `json:"q" binding:"required,min=2,max=200"`
 }
 
 type SearchImageRequest struct {
-	UserID int64 `json:"user_id" binding:"required"`
+	UserID int64                 `form:"user_id" binding:"required"`
+	File   *multipart.FileHeader `form:"image" binding:"required"`
+}
+
+type SearchResponse struct {
+	Results []MediaResponse `json:"results"`
+	Total   int             `json:"total"`
 }
 
 type MediaResponse struct {
@@ -19,7 +25,7 @@ type MediaResponse struct {
 	ThumbURL string `json:"thumb_url"`
 }
 
-// Upload (multipart for files)
+// Upload Image
 type UploadRequest struct {
 	Files []*multipart.FileHeader `form:"files[]" binding:"required,min=1,max=10"`
 	Dedup bool                    `form:"dedup,default=true"`

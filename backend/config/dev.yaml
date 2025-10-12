@@ -42,6 +42,6 @@ faiss:
   timeout: 5s
   
 log:
-  level: "debug"
+  level: "info"
   format: "text"
   sourceFolder: "backend"

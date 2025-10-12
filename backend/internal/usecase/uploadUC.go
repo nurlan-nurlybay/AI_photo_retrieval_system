@@ -85,7 +85,7 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 	out := make([]ucdto.UploadResult, 0, len(items))
 
 	for i, it := range items {
-		s.log.InfoContext(ctx, "processing upload item",
+		s.log.DebugContext(ctx, "processing upload item",
 			"index", i,
 			"user_id", it.UserID,
 			"mime_type", it.MimeType,
@@ -126,7 +126,7 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 			)
 		}
 		if existing != nil {
-			s.log.InfoContext(ctx, "duplicate media found, skipping",
+			s.log.DebugContext(ctx, "duplicate media found, skipping",
 				"index", i,
 				"user_id", it.UserID,
 				"checksum", check,
@@ -252,7 +252,7 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 				"queue", "jobs:embed",
 			)
 		}
-		
+
 		out = append(out, ucdto.UploadResult{Status: ucdto.StatusSaved, Media: m})
 	}
 
