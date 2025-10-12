@@ -64,6 +64,7 @@ func (w *RetryWorker) step(ctx context.Context) {
 	}
 }
 
+// ===== Helpers =====
 func f64ToLEf32(v []float64) []byte {
 	out := make([]byte, 4*len(v))
 	for i, x := range v {
