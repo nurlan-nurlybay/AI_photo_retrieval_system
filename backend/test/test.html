@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Backend Test Page</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: #f5f5f5;
+      font-family: sans-serif;
+    }
+    button, input[type="file"], input[type="text"], input[type="number"] {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      background: #fff;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #ddd;
+    }
+    #status {
+      margin-top: 20px;
+      font-size: 14px;
+      color: #333;
+      max-width: 800px;
+      width: 90%;
+      word-break: break-word;
+    }
+    img.thumb {
+      max-width: 100px;
+      max-height: 100px;
+      margin: 5px;
+      border-radius: 4px;
+      border: 1px solid #aaa;
+    }
+    .result {
+      padding: 8px;
+      border-bottom: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Upload Images</h2>
+  <input type="file" id="fileInput" multiple>
+  <button id="uploadBtn">Upload</button>
+
+  <h2>Search</h2>
+  <input type="number" id="userId" placeholder="User ID" value="404">
+  <input type="text" id="query" placeholder="Search query" value="cat pictures">
+  <button id="searchBtn">Search</button>
+
+  <div id="status"></div>
+
+  <script>
+    const statusEl = document.getElementById("status");
+
+    // === Upload ===
+    document.getElementById("uploadBtn").addEventListener("click", async () => {
+      const files = document.getElementById("fileInput").files;
+      if (files.length === 0) {
+        statusEl.textContent = "Pick some files first.";
+        return;
+      }
+
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append("files[]", files[i]);
+      }
+
+      statusEl.textContent = `Uploading ${files.length} file(s)...`;
+
+      try {
+        const res = await fetch("http://localhost:8080/api/upload/image", {
+          method: "POST",
+          body: formData
+        });
+        const data = await res.json();
+        renderUploadResponse(data);
+      } catch (err) {
+        statusEl.textContent = "Upload failed: " + err.message;
+      }
+    });
+
+    // === Search ===
+    document.getElementById("searchBtn").addEventListener("click", async () => {
+      const userId = parseInt(document.getElementById("userId").value, 10);
+      const query = document.getElementById("query").value;
+
+      if (!query) {
+        statusEl.textContent = "Enter a search query.";
+        return;
+      }
+
+      statusEl.textContent = "Searching...";
+
+      try {
+        const res = await fetch("http://localhost:8080/api/search/text", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ user_id: userId, q: query })
+        });
+
+        const data = await res.json();
+        renderSearchResponse(data);
+      } catch (err) {
+        statusEl.textContent = "Search failed: " + err.message;
+      }
+    });
+
+    // --- Render functions ---
+
+    function renderUploadResponse(data) {
+      // handle single object or array
+      if (Array.isArray(data)) {
+        statusEl.innerHTML = data.map(item => `
+          <div class="result">
+            <strong>ID:</strong> ${item.id}<br>
+            <strong>User:</strong> ${item.user_id}<br>
+            <a href="${item.url}" target="_blank">View Image</a><br>
+            <img class="thumb" src="${item.thumb_url}" alt="thumb">
+          </div>
+        `).join("");
+      } else {
+        statusEl.innerHTML = `
+          <div class="result">
+            <strong>ID:</strong> ${data.id}<br>
+            <strong>User:</strong> ${data.user_id}<br>
+            <a href="${data.url}" target="_blank">View Image</a><br>
+            <img class="thumb" src="${data.thumb_url}" alt="thumb">
+          </div>
+        `;
+      }
+    }
+
+    function renderSearchResponse(data) {
+      let html = `
+        <div>
+          <h3>Summary</h3>
+          <p>Total: ${data.summary.total} | Saved: ${data.summary.saved} | Duplicates: ${data.summary.duplicates} | Failed: ${data.summary.failed}</p>
+        </div>
+      `;
+
+      html += `<h3>Results</h3>`;
+
+      html += data.results.map(r => `
+        <div class="result">
+          <strong>File:</strong> ${r.filename}<br>
+          <strong>Status:</strong> ${r.status}<br>
+          ${r.error ? `<strong>Error:</strong> ${r.error}<br>` : ""}
+          ${
+            r.media
+              ? `<a href="${r.media.url}" target="_blank">View Image</a><br>
+                 <img class="thumb" src="${r.media.thumb_url}" alt="thumb"><br>
+                 <em>${r.media.width}x${r.media.height}, ${Math.round(r.media.size_bytes / 1024)} KB</em>`
+              : ""
+          }
+        </div>
+      `).join("");
+
+      statusEl.innerHTML = html;
+    }
+  </script>
+</body>
+</html>
