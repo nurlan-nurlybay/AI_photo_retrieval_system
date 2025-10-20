@@ -1,7 +1,7 @@
 import threading
 import faiss
 import numpy as np
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # Global lock to keep FAISS thread-safe
 LOCK = threading.RLock()
@@ -9,6 +9,8 @@ LOCK = threading.RLock()
 # Namespace (model) → FAISS index mapping
 INDICES: Dict[str, faiss.Index] = {}
 
+# Namespace (model) → FAISS index mapping
+INDICES: Dict[str, faiss.Index] = {}
 
 def _to_np(vec: List[float]) -> np.ndarray:
     """Convert list of floats to a 2D contiguous float32 numpy array."""

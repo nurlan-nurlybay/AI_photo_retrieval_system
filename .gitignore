@@ -171,3 +171,9 @@ docker-compose.dev.yml
 volumes/
 seaweed-data/
 api_data/
+seaweed-data/
+
+# docker_dev bullshi
+.devcontainer/
+.vscode/
+docker-compose.dev.yml
