@@ -17,3 +17,4 @@ class ModelName(str, Enum):
 class EncodeOptions(BaseModel):
     model: ModelName = ModelName.vit_b32
     normalize: bool = True
+    quantize: bool = True
