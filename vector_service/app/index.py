@@ -1,7 +1,7 @@
 import threading
 import faiss
 import numpy as np
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 # Global lock to keep FAISS thread-safe
 LOCK = threading.RLock()
@@ -9,17 +9,20 @@ LOCK = threading.RLock()
 # Namespace (model) → FAISS index mapping
 INDICES: Dict[str, faiss.Index] = {}
 
+
 def _to_np(vec: List[float]) -> np.ndarray:
     """Convert list of floats to a 2D contiguous float32 numpy array."""
     arr = np.asarray(vec, dtype="float32")
     arr = np.atleast_2d(arr)  # ensures shape (1, dim)
     return np.ascontiguousarray(arr, dtype="float32")
 
+
 def _normalize(arr: np.ndarray) -> np.ndarray:
     """L2-normalize rows for cosine similarity."""
     norms = np.linalg.norm(arr, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
     return arr / norms
+
 
 def _get_index(namespace: str, dim: int) -> faiss.Index:
     """Return existing index for namespace, or create a new one."""
@@ -34,6 +37,7 @@ def _get_index(namespace: str, dim: int) -> faiss.Index:
                 raise ValueError(f"vector_dim_mismatch: expected {ix.d}, got {dim}")
         return ix
 
+
 def health() -> Dict[str, Any]:
     """Return a summary of all loaded FAISS indexes."""
     with LOCK:
@@ -41,6 +45,7 @@ def health() -> Dict[str, Any]:
             "namespaces": {ns: int(ix.ntotal) for ns, ix in INDICES.items()},
             "dims": {ns: ix.d for ns, ix in INDICES.items()},
         }
+
 
 def add(namespace: str, media_id: int, vector: List[float], normalize: bool = True) -> Dict[str, Any]:
     """Add or update a vector in the specified FAISS namespace."""
@@ -76,6 +81,7 @@ def add(namespace: str, media_id: int, vector: List[float], normalize: bool = Tr
             "error": str(e),
         }
 
+
 def delete(namespace: str, media_id: int) -> Dict[str, Any]:
     """Remove a vector by ID from the specified namespace."""
     ix = INDICES.get(namespace)
@@ -87,6 +93,7 @@ def delete(namespace: str, media_id: int) -> Dict[str, Any]:
         deleted = int(n_removed) > 0
 
     return {"ok": True, "namespace": namespace, "id": media_id, "deleted": deleted}
+
 
 def search(namespace: str, vector: List[float], k: int, normalize: bool = True) -> Dict[str, Any]:
     """Search for top-k similar vectors in the specified namespace."""

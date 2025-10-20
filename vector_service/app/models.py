@@ -3,7 +3,7 @@ from typing import List, Optional
 
 # ---------- Add ----------
 class VectorAddRequest(BaseModel):
-    model: str = "img-v1"    
+    namespace: str             # unique username/namespace
     id: int                    # media_id
     vector: List[float]
     normalize: bool = True
@@ -11,7 +11,7 @@ class VectorAddRequest(BaseModel):
 class VectorAddResponse(BaseModel):
     ok: bool
     id: int
-    model: Optional[str] = None
+    namespace: Optional[str] = None
     replaced: bool = False
     dim: Optional[int] = None
     error: Optional[str] = None
