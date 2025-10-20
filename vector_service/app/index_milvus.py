@@ -35,8 +35,8 @@ def add(namespace: str, media_id: int, vector: List[float], normalize: bool = Tr
 
         with LOCK:
             col = get_collection(namespace)
-            # Insert expects column-wise data: [ids, vectors]
-            col.insert([[int(media_id)], vec[0].tolist()])
+            # Insert expects column-wise data: [ids, [vector]]
+            col.insert([[int(media_id)], [vec[0].tolist()]])
             col.flush()
 
         return {

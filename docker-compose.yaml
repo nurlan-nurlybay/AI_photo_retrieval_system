@@ -24,14 +24,14 @@ services:
     build: ./ml_service
     container_name: ml-service
     expose: ["8003"]
-    ports: ["8003:8003"]
+    ports: ["8005:8003"]
     networks: [clip-net]
 
   vector_service:
     build: ./vector_service
     container_name: vector-service
     expose: ["8002"]
-    ports: ["8002:8002"]
+    ports: ["8006:8002"]
     depends_on:
       milvus:
         condition: service_healthy
