@@ -156,7 +156,21 @@ prettifier.py
 # the rest
 .swp
 temp.py
+temp/
 
+seaweed-data/
+
+# docker_dev bullshi
+.devcontainer/
+.vscode/
+docker-compose.dev.yml
+*.toml
+*.flake8
+
+
+volumes/
+seaweed-data/
+api_data/
 seaweed-data/
 
 # docker_dev bullshi

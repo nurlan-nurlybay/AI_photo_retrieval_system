@@ -5,7 +5,7 @@ from app.models import (
     VectorDeleteRequest, VectorDeleteResponse,
     VectorSearchRequest, VectorSearchResponse,
 )
-import app.index as idx
+import app.index_milvus as idx
 import traceback
 
 app = FastAPI(title="faiss-service", version="1.0")
@@ -21,11 +21,11 @@ def healthz():
 @app.post("/v1/vectors/add", response_model=VectorAddResponse)
 def add_vector(req: VectorAddRequest):
     try:
-        res = idx.add(req.model, req.id, req.vector, req.normalize)
+        res = idx.add(req.namespace, req.id, req.vector, req.normalize)
         return VectorAddResponse(
             ok=True,
             id=req.id,
-            model=req.model,
+            namespace=req.namespace,
             replaced=False,
             dim=res.get("dim"),
         )
@@ -33,7 +33,7 @@ def add_vector(req: VectorAddRequest):
     except ValueError as e:
         return JSONResponse(
             status_code=400,
-            content={"ok": False, "id": req.id, "model": req.model, "error": str(e)},
+            content={"ok": False, "id": req.id, "namespace": req.namespace, "error": str(e)},
         )
     except Exception as e:
         traceback.print_exc()
@@ -42,7 +42,7 @@ def add_vector(req: VectorAddRequest):
             content={
                 "ok": False,
                 "id": req.id,
-                "model": req.model,
+                "namespace": req.namespace,
                 "error": str(e) or "index_write_failed",
             },
         )
