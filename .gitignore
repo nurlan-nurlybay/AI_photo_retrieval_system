@@ -166,3 +166,8 @@ seaweed-data/
 docker-compose.dev.yml
 *.toml
 *.flake8
+
+
+volumes/
+seaweed-data/
+api_data/
