@@ -21,13 +21,13 @@ def healthz():
 @app.post("/v1/vectors/add", response_model=VectorAddResponse)
 def add_vector(req: VectorAddRequest):
     try:
-        res = idx.add(req.namespace, req.id, req.vector, req.normalize)
+        idx.add(req.namespace, req.id, req.vector, req.normalize)
         return VectorAddResponse(
             ok=True,
             id=req.id,
             namespace=req.namespace,
             replaced=False,
-            dim=res.get("dim"),
+            dim=len(req.vector),
         )
 
     except ValueError as e:
@@ -52,11 +52,12 @@ def add_vector(req: VectorAddRequest):
 @app.post("/v1/vectors/delete", response_model=VectorDeleteResponse)
 def delete_vector(req: VectorDeleteRequest):
     try:
-        res = idx.delete(req.model, req.id)
+        namespace = req.namespace or req.model  # backward compatibility
+        res = idx.delete(namespace, req.id)
         return VectorDeleteResponse(
             ok=True,
             id=req.id,
-            model=req.model,
+            namespace=namespace,
             deleted=res.get("deleted", False),
         )
 
@@ -82,10 +83,11 @@ def delete_vector(req: VectorDeleteRequest):
 @app.post("/v1/vectors/search", response_model=VectorSearchResponse)
 def search_vector(req: VectorSearchRequest):
     try:
-        res = idx.search(req.model, req.vector, req.k, req.normalize)
+        namespace = req.namespace or req.model  # backward compatibility
+        res = idx.search(namespace, req.vector, req.k, req.normalize)
         return VectorSearchResponse(
             ok=True,
-            model=req.model,
+            namespace=namespace,
             k=req.k,
             results=res.get("results", []),
             degraded=res.get("degraded", False),
@@ -95,7 +97,7 @@ def search_vector(req: VectorSearchRequest):
     except ValueError as e:
         return JSONResponse(
             status_code=400,
-            content={"ok": False, "model": req.model, "error": str(e), "k": req.k},
+            content={"ok": False, "namespace": getattr(req, "namespace", None) or getattr(req, "model", None), "error": str(e), "k": req.k},
         )
     except Exception as e:
         traceback.print_exc()
@@ -103,7 +105,7 @@ def search_vector(req: VectorSearchRequest):
             status_code=500,
             content={
                 "ok": False,
-                "model": req.model,
+                "namespace": getattr(req, "namespace", None) or getattr(req, "model", None),
                 "error": str(e) or "index_search_failed",
                 "k": req.k,
             },

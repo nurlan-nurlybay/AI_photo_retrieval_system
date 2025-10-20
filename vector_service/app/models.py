@@ -11,7 +11,7 @@ class VectorAddRequest(BaseModel):
 class VectorAddResponse(BaseModel):
     ok: bool
     id: int
-    namespace: Optional[str] = None
+    namespace: str
     replaced: bool = False
     dim: Optional[int] = None
     error: Optional[str] = None
@@ -19,22 +19,27 @@ class VectorAddResponse(BaseModel):
 
 # ---------- Delete ----------
 class VectorDeleteRequest(BaseModel):
-    """Remove a vector by ID from a specific namespace."""
-    model: str = "img-v1"
+    """Remove a vector by ID from a specific namespace.
+    Accepts either 'namespace' (preferred) or legacy 'model' for backward compatibility.
+    """
+    namespace: Optional[str] = None
+    model: Optional[str] = None
     id: int
 
 
 class VectorDeleteResponse(BaseModel):
     ok: bool
     id: Optional[int] = None
-    model: Optional[str] = None
+    namespace: str | None = None
     deleted: Optional[bool] = None
     error: Optional[str] = None
 
 
 # ---------- Search ----------
 class VectorSearchRequest(BaseModel):
-    model: str = "img-v1"
+    """Search within a namespace. Accepts 'namespace' or legacy 'model'."""
+    namespace: Optional[str] = None
+    model: Optional[str] = None
     vector: List[float]
     k: int = Field(..., gt=0)
     normalize: bool = True
@@ -47,7 +52,7 @@ class SearchResult(BaseModel):
 
 class VectorSearchResponse(BaseModel):
     ok: bool
-    model: Optional[str] = None
+    namespace: str
     k: int
     results: List[SearchResult] = Field(default_factory=list)
     degraded: bool = False
