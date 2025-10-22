@@ -18,11 +18,22 @@ type Client struct {
 	http    *http.Client
 }
 
-func NewClient(cfg config.Clip) usecase.Embedder {
-	return &Client{
-		baseURL: fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port),
-		http:    &http.Client{},
+func NewClient(ctx context.Context, cfg config.Clip, httpClent *http.Client) (usecase.Embedder, error) {
+	base := fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port)
+
+	client := &Client{
+		baseURL: base,
+		http:    httpClent,
 	}
+
+	if err := client.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("clip connection failed: %w", err)
+	}
+	return client, nil
+}
+
+func (c *Client) Ping(ctx context.Context) error {
+	return nil
 }
 
 func (c *Client) EmbedText(ctx context.Context, text string) ([]float64, error) {

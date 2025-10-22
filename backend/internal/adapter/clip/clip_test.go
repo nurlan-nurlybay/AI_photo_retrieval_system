@@ -2,6 +2,7 @@ package clip_test
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
@@ -9,10 +10,11 @@ import (
 )
 
 func TestEmbedTextIntegration(t *testing.T) {
-	client := clip.NewClient(config.Clip{
-		Host: "localhost",
-		Port: 8003,
-	})
+	client, _ := clip.NewClient(
+		context.Background(),
+		config.Clip{Host: "localhost", Port: 8003},
+		&http.Client{},
+	)
 
 	t.Log("sending request to Python CLIP service...")
 

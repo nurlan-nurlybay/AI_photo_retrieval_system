@@ -13,8 +13,8 @@ type Seaweedfs struct {
 	client  *http.Client
 }
 
-func NewSeaweedfs(ctx context.Context, url string) (*Seaweedfs, error) {
-	s := &Seaweedfs{baseURL: url}
+func NewSeaweedfs(ctx context.Context, url string, client *http.Client) (*Seaweedfs, error) {
+	s := &Seaweedfs{baseURL: url, client: client}
 
 	if err := s.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("seaweedfs connection failed: %w", err)

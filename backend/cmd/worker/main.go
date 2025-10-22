@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -30,6 +31,15 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	httpClient := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:       100,
+			IdleConnTimeout:    90 * time.Second,
+			DisableCompression: false,
+		},
+	}
+
 	// Create connection pool
 	pgxpool, err := postgresadapter.InitDB(ctx, cfg)
 	if err != nil {
@@ -43,8 +53,11 @@ func main() {
 		log.Fatal("failed to connect to seaweedfs:", err)
 	}
 	workerRepo := postgresadapter.NewWorkRepo(pgxpool, store)
-	clipClient := clipadapter.NewClient(cfg.Clip)
-	faissClient, err := faissadapter.NewClient(ctx, cfg.Faiss)
+	clipClient, err := clipadapter.NewClient(ctx, cfg.Clip, httpClient)
+	if err != nil {
+		log.Fatal("failed to conn clip:", err)
+	}
+	faissClient, err := faissadapter.NewClient(ctx, cfg.Faiss, httpClient)
 	if err != nil {
 		log.Fatal("failed to conn faiss:", err)
 	}

@@ -35,14 +35,10 @@ seaweedfs:
 clip:
   host: "localhost"
   port: 8003
-  timeout: 5s
-  maxIdleConn: 5
 
 faiss:
   host: "localhost"
   port: 8002
-  protocol: "http"
-  timeout: 5s
   
 log:
   level: "info"
