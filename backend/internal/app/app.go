@@ -36,13 +36,15 @@ type App struct {
 
 func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, error) {
 	// Create connection pool and repo
-	pgxpool, err := postgresadapter.InitDB(ctx, cfg)
-	if err != nil {
-		log.Fatal("failed to connect to postgres:", err)
-	}
-	log.Info("connected to postgres")
+	// pgxpool, err := postgresadapter.InitDB(ctx, cfg)
+	// if err != nil {
+	// 	log.Fatal("failed to connect to postgres:", err)
+	// }
+	// pgRepo := postgresadapter.NewMediaPG(pgxpool)
 
-	pgRepo := postgresadapter.NewMediaPG(pgxpool)
+	dbClient := InitDB(ctx, cfg.Postgres.DSN())
+	pgRepo := postgresadapter.NewMediaRepo(dbClient)
+	log.Info("connected to postgres")
 
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,

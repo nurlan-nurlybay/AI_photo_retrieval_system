@@ -9,7 +9,6 @@ import (
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/http"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/postgres"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
-	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/closer"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/db"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/db/pg"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/db/prettier"
@@ -50,9 +49,25 @@ func (s *serviceProvider) DBClient(ctx context.Context) db.Client {
 		if err != nil {
 			log.Fatalf("ping error: %s", err.Error())
 		}
-		closer.Add(cl.Close)
+		// closer.Add(cl.Close)
 		s.dbClient = cl
 	}
 
 	return s.dbClient
+}
+
+func InitDB(ctx context.Context, dsn string) db.Client {
+	pgLog := LogQuery
+
+	cl, err := pg.New(ctx, dsn, pgLog)
+	if err != nil {
+		log.Fatalf("failed to create db client: %v", err)
+	}
+
+	err = cl.DB().Ping(ctx)
+	if err != nil {
+		log.Fatalf("ping error: %s", err.Error())
+	}
+	// closer.Add(cl.Close)
+	return cl
 }

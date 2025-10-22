@@ -10,10 +10,10 @@ type Media struct {
 	UserID    int64
 	URL       string
 	ThumbURL  string
-	MimeType  string
+	MimeType  string // e.g. "image/jpeg", "image/png", "image/heic".
 	SizeBytes int64
-	Checksum  string    // e.g., SHA256 for dedup
-	CreatedAt time.Time // server insert time
+	Checksum  string // e.g. SHA256 for dedup
+	CreatedAt time.Time
 	Metadata  Metadata
 }
 
@@ -22,7 +22,6 @@ type Metadata struct {
 	Orientation      int
 	Width            int
 	Height           int
-	FileFormat       string // "jpeg","png","heic"
 	CameraMake       string
 	CameraModel      string
 	Software         string

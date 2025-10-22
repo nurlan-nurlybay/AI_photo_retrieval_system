@@ -26,7 +26,6 @@ const (
 	mediaMetaTakenAtCol  = "taken_at"
 	mediaMetaWidthCol    = "meta_width"
 	mediaMetaHeightCol   = "meta_height"
-	mediaMetaFmtCol      = "meta_file_format"
 	mediaMetaMakeCol     = "meta_camera_make"
 	mediaMetaModelCol    = "meta_camera_model"
 	mediaMetaSoftwareCol = "meta_software"
@@ -39,7 +38,7 @@ type MediaRepo struct {
 
 }
 
-func NewRepo(db db.Client) *MediaRepo {
+func NewMediaRepo(db db.Client) *MediaRepo {
 	return &MediaRepo{
 		db:               db,
 		uniqUserChecksum: "media_user_checksum_uniq", // as defined in migration file
@@ -50,15 +49,15 @@ func (r *MediaRepo) Create(ctx context.Context, m *domain.Media) error {
 	builder := squirrel.Insert(mediaTableName).
 		Columns(
 			mediaIDCol, mediaUserIDCol, mediaURLCol, mediaThumbURLCol,
-			mediaMimeTypeCol, mediaSizeBytesCol, mediaChecksumCol, mediaCreatedAtCol, 
-			mediaMetaTakenAtCol, mediaMetaWidthCol, mediaMetaHeightCol, mediaMetaFmtCol,
+			mediaMimeTypeCol, mediaSizeBytesCol, mediaChecksumCol, mediaCreatedAtCol,
+			mediaMetaTakenAtCol, mediaMetaWidthCol, mediaMetaHeightCol, 
 			mediaMetaMakeCol, mediaMetaModelCol, mediaMetaSoftwareCol, mediaMetaOrientCol,
 		).
 		Values(
 			m.ID, m.UserID, m.URL, m.ThumbURL,
 			m.MimeType, m.SizeBytes, m.Checksum,
 			m.CreatedAt, m.Metadata.DateTimeOriginal,
-			m.Metadata.Width, m.Metadata.Height, m.Metadata.FileFormat,
+			m.Metadata.Width, m.Metadata.Height, 
 			m.Metadata.CameraMake, m.Metadata.CameraModel, m.Metadata.Software, m.Metadata.Orientation,
 		)
 
