@@ -2,9 +2,10 @@ package faiss_test
 
 import (
 	"context"
+	"net/http"
 	"testing"
-	"time"
 
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss"
 )
 
@@ -17,7 +18,11 @@ func makeVec(val float64) []float64 {
 }
 
 func TestInsert_RealService(t *testing.T) {
-	client := faiss.NewClientWithBaseURL("http://localhost:8002", 5*time.Second)
+	client, _ := faiss.NewClient(
+		context.Background(),
+		config.Faiss{Host: "localhost", Port: 8002},
+		&http.Client{},
+	)
 
 	// 512-d float64 vector
 	vec := makeVec(0.0)

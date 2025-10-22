@@ -8,20 +8,11 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	faissdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss/dto"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
 )
-
-// test-only constructor
-func NewClientWithBaseURL(baseURL string, timeout time.Duration) *Client {
-	return &Client{
-		baseURL: baseURL,
-		http:    &http.Client{Timeout: timeout},
-	}
-}
 
 type Client struct {
 	baseURL string
@@ -38,14 +29,8 @@ func NewClient(ctx context.Context, cfg config.Faiss, httpClient *http.Client) (
 		http:    httpClient,
 	}
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/healthz", nil)
-	resp, err := client.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to FAISS service at %s: %w", base, err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("FAISS service unhealthy (status %d)", resp.StatusCode)
+	if err := client.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("clip connection failed: %w", err)
 	}
 
 	return client, nil
@@ -175,6 +160,25 @@ func (c *Client) Delete(ctx context.Context, id int64) error {
 	}
 	if !out.Ok {
 		return fmt.Errorf("faiss delete failed: %v", out.Error)
+	}
+
+	return nil
+}
+
+func (c *Client) Ping(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/healthz", nil)
+	if err != nil {
+		return fmt.Errorf("failed to create ping request: %w", err)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("ping request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("ping returned non-OK status: %d", resp.StatusCode)
 	}
 
 	return nil
