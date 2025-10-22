@@ -32,14 +32,10 @@ seaweedfs:
 clip:
   host: "clip-service"
   port: 8001
-  timeout: 5s
-  maxIdleConn: 5
 
 faiss:
   host: "faiss-service"
   port: 8002
-  protocol: "http"
-  timeout: 5s
 
 log:
   level: "debug" # "info", "debug", "warn", "error"

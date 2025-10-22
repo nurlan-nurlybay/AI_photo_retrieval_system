@@ -30,14 +30,12 @@ type Client struct {
 
 var _ usecase.VectorIndex = (*Client)(nil)
 
-func NewClient(ctx context.Context, cfg config.Faiss) (usecase.VectorIndex, error) {
+func NewClient(ctx context.Context, cfg config.Faiss, httpClient *http.Client) (usecase.VectorIndex, error) {
 	base := fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port)
 
 	client := &Client{
 		baseURL: base,
-		http: &http.Client{
-			Timeout: cfg.Timeout,
-		},
+		http:    httpClient,
 	}
 
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/healthz", nil)
@@ -99,7 +97,8 @@ func (c *Client) Insert(ctx context.Context, id int64, vector []float64) error {
 		if out.Error != nil {
 			return fmt.Errorf("faiss error: %s", *out.Error)
 		}
-		return fmt.Errorf("faiss returned not ok")	}
+		return fmt.Errorf("faiss returned not ok")
+	}
 
 	// heck for returned dim
 	if out.Dim != nil && *out.Dim != len(vector) {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	clipadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/clip"
@@ -40,27 +41,35 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 		log.Fatal("failed to connect to postgres:", err)
 	}
 	log.Info("connected to postgres")
+	pgRepo := postgresadapter.NewMediaPG(pgxpool)
+
+	httpClient := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:       100,
+			IdleConnTimeout:    90 * time.Second,
+			DisableCompression: false,
+		},
+	}
 
 	// Prep dependencies
-	pgRepo := postgresadapter.NewMediaPG(pgxpool)
-	clipClient := clipadapter.NewClient(cfg.Clip)
-	faissClient, err := faissadapter.NewClient(ctx, cfg.Faiss)
+	clipClient, err := clipadapter.NewClient(ctx, cfg.Clip, httpClient)
+	if err != nil {
+		log.Fatal("failed to conn clip:", err)
+	}
+
+	faissClient, err := faissadapter.NewClient(ctx, cfg.Faiss, httpClient)
 	if err != nil {
 		log.Fatal("failed to conn faiss:", err)
 	}
+
 	redisClient, err := redisadapter.NewClient(ctx, cfg)
 	if err != nil {
 		log.Fatal("failed to conn redis:", err)
 	}
-	log.Info("connected to redis client")
+	log.Info("connected to clip, faiss, redis client")
 
-	// Local storage in ./var/uploads/media/1/abc/
-	// store, err := seaweedfs.NewLocalFS("./var/uploads", "http://localhost:8080/uploads")
-	// if err != nil {
-	// 	log.Fatal("failed to connect to seaweedfs:", err)
-	// }
-	// Seaweedfs init
-	store, err := seaweedfs.NewSeaweedfs(ctx, cfg.Seaweedfs.BaseURL)
+	store, err := seaweedfs.NewSeaweedfs(ctx, cfg.Seaweedfs.BaseURL, httpClient)
 	if err != nil {
 		log.Fatal("failed to conn seaweedfs:", err)
 	}
