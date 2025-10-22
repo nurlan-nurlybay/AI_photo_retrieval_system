@@ -34,11 +34,11 @@ seaweedfs:
 
 clip:
   host: "localhost"
-  port: 8003
+  port: 8005
 
 faiss:
   host: "localhost"
-  port: 8002
+  port: 8006
   
 log:
   level: "info"

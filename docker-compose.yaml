@@ -1,24 +1,22 @@
-version: "3.9"
-
 name: ai-photo-retrieval
 
 services:
-  api:
-    build: ./api
-    container_name: api-gateway
-    ports: ["8080:8080"]
-    environment:
-      ML_URL: "http://ml_service:8003"
-      VS_URL: "http://vector_service:8002"
-      # SeaweedFS
-      FILER_URL: "http://seaweedfs:8888"
-      # What URL the client should use to download images:
-      PUBLIC_IMAGE_BASE: "http://localhost:8888"
-      META_PATH: "/data/metadata_store.json"
-    volumes:
-      - ./api_data:/data            # persist metadata JSON
-    depends_on: [ml_service, vector_service, seaweedfs]
-    networks: [clip-net]
+  # api:
+  #   build: ./backend
+  #   container_name: api-gateway
+  #   ports: ["8080:8080"]
+  #   environment:
+  #     ML_URL: "http://ml_service:8003"
+  #     VS_URL: "http://vector_service:8002"
+  #     # SeaweedFS
+  #     FILER_URL: "http://seaweedfs:8888"
+  #     # What URL the client should use to download images:
+  #     PUBLIC_IMAGE_BASE: "http://localhost:8888"
+  #     META_PATH: "/data/metadata_store.json"
+  #   volumes:
+  #     - ./api_data:/data            # persist metadata JSON
+  #   depends_on: [ml_service, vector_service, seaweedfs]
+  #   networks: [clip-net]
 
   ml_service:
     build: ./ml_service
@@ -46,7 +44,6 @@ services:
       - "8888:8888"   # filer (HTTP file API)  <-- keep this
       - "8333:8333"   # S3 gateway (optional)
       - "18080:18080" # volume UI (optional)
-    # - "8080:8080" # <-- REMOVE this; it conflicts with your API
     volumes:
       - ./seaweed-data:/data
     networks: [clip-net]

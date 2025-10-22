@@ -2,8 +2,8 @@
 -- +goose StatementBegin
 CREATE TABLE embeddings (
   media_id   BIGINT PRIMARY KEY REFERENCES media(id) ON DELETE CASCADE,
-  model      TEXT   NOT NULL,
-  vec_bytes  BYTEA  NOT NULL,              -- little-endian float32[]
+  model      TEXT   NOT NULL,              -- e.g. "open_clip:ViT-L/14@336px"
+  vec_bytes  BYTEA  NOT NULL,              -- raw float32[] vector data
   status     TEXT   NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','in_index','failed')),
   last_error TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

@@ -2,6 +2,7 @@ package pg
 
 import (
 	"context"
+	"log"
 	"log/slog"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
@@ -19,12 +20,22 @@ const (
 )
 
 type pg struct {
-	dbc *pgxpool.Pool
+	dbc      *pgxpool.Pool
+	logQuery func(ctx context.Context, q db.Query, args ...interface{})
 }
 
-func NewDB(dbc *pgxpool.Pool) db.DB {
+// defaultLogQuery is the default logger if none is provided
+func defaultLogQuery(ctx context.Context, q db.Query, args ...interface{}) {
+	log.Printf("Query: %s, Args: %v", q.QueryRaw, args)
+}
+
+func NewDB(dbc *pgxpool.Pool, logQuery func(ctx context.Context, q db.Query, args ...interface{})) db.DB {
+	if logQuery == nil {
+		logQuery = defaultLogQuery
+	}
 	return &pg{
-		dbc: dbc,
+		dbc:      dbc,
+		logQuery: logQuery,
 	}
 }
 

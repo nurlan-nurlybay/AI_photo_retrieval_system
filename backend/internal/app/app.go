@@ -41,6 +41,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 		log.Fatal("failed to connect to postgres:", err)
 	}
 	log.Info("connected to postgres")
+
 	pgRepo := postgresadapter.NewMediaPG(pgxpool)
 
 	httpClient := &http.Client{
