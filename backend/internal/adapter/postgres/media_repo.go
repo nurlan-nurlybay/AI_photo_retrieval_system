@@ -59,7 +59,7 @@ func (r *MediaPG) Create(ctx context.Context, m *domain.Media) error {
 	}
 
 	// Only insert metadata if it exists
-	if m.Metadata.Width != 0 || m.Metadata.Height != 0 || m.Metadata.FileFormat != "" ||
+	if m.Metadata.Width != 0 || m.Metadata.Height != 0 ||
 		m.Metadata.CameraMake != "" || m.Metadata.CameraModel != "" || m.Metadata.Software != "" ||
 		m.Metadata.DateTimeOriginal != nil {
 
@@ -72,7 +72,7 @@ func (r *MediaPG) Create(ctx context.Context, m *domain.Media) error {
 		`
 		_, err = tx.Exec(ctx, metaQ,
 			m.ID, m.Metadata.DateTimeOriginal, m.Metadata.Orientation, m.Metadata.Width,
-			m.Metadata.Height, m.Metadata.FileFormat, m.Metadata.CameraMake,
+			m.Metadata.Height, m.Metadata.CameraMake,
 			m.Metadata.CameraModel, m.Metadata.Software,
 		)
 		if err != nil {
@@ -82,7 +82,6 @@ func (r *MediaPG) Create(ctx context.Context, m *domain.Media) error {
 
 	return tx.Commit(ctx)
 }
-
 
 func (r *MediaPG) Delete(ctx context.Context, userID, id int64) error {
 	const q = `
@@ -108,7 +107,7 @@ func (r *MediaPG) Get(ctx context.Context, userID, id int64) (*domain.Media, err
 			m.id, m.user_id, m.url, m.thumb_url, m.mime_type, m.size_bytes, 
 			m.checksum, m.created_at,
 			md.datetime_original, md.orientation, md.width, md.height, 
-			md.file_format, md.camera_make, md.camera_model, md.software
+			md.camera_make, md.camera_model, md.software
 		FROM media m
 		LEFT JOIN media_metadata md ON m.id = md.media_id
 		WHERE m.id = $1 AND m.user_id = $2
@@ -130,7 +129,6 @@ func (r *MediaPG) Get(ctx context.Context, userID, id int64) (*domain.Media, err
 		&md.Orientation,
 		&md.Width,
 		&md.Height,
-		&md.FileFormat,
 		&md.CameraMake,
 		&md.CameraModel,
 		&md.Software,
@@ -153,7 +151,7 @@ func (r *MediaPG) GetByChecksum(ctx context.Context, userID int64, checksum stri
 			m.id, m.user_id, m.url, m.thumb_url, m.mime_type, m.size_bytes, 
 			m.checksum, m.created_at,
 			md.datetime_original, md.orientation, md.width, md.height, 
-			md.file_format, md.camera_make, md.camera_model, md.software
+			md.camera_make, md.camera_model, md.software
 		FROM media m
 		LEFT JOIN media_metadata md ON m.id = md.media_id
 		WHERE m.user_id = $1 AND m.checksum = $2
@@ -175,7 +173,6 @@ func (r *MediaPG) GetByChecksum(ctx context.Context, userID int64, checksum stri
 		&md.Orientation,
 		&md.Width,
 		&md.Height,
-		&md.FileFormat,
 		&md.CameraMake,
 		&md.CameraModel,
 		&md.Software,
@@ -219,7 +216,7 @@ func (r *MediaPG) List(ctx context.Context, f domain.MediaFilter, p domain.Page,
 			m.id, m.user_id, m.url, m.thumb_url, m.mime_type, m.size_bytes, 
 			m.checksum, m.created_at,
 			md.datetime_original, md.orientation, md.width, md.height, 
-			md.file_format, md.camera_make, md.camera_model, md.software
+			md.camera_make, md.camera_model, md.software
 		FROM media m
 		LEFT JOIN media_metadata md ON m.id = md.media_id
 		WHERE 1=1
@@ -299,7 +296,6 @@ func (r *MediaPG) List(ctx context.Context, f domain.MediaFilter, p domain.Page,
 			&md.Orientation,
 			&md.Width,
 			&md.Height,
-			&md.FileFormat,
 			&md.CameraMake,
 			&md.CameraModel,
 			&md.Software,

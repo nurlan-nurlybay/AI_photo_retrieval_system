@@ -212,7 +212,6 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 				Orientation:      meta.Orientation,
 				Width:            w,
 				Height:           h,
-				FileFormat:       extFromMime(it.MimeType),
 				CameraMake:       meta.CameraMake,
 				CameraModel:      meta.CameraModel,
 				Software:         meta.Software,
@@ -265,12 +264,11 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 }
 
 func (s *mediaService) Delete(ctx context.Context, userID, id int64) error {
-	// fetch first to know storage keys
 	_, err := s.repo.Get(ctx, userID, id)
 	if err != nil {
 		return err
 	}
-	// TODO: delete from object storage if you store keys somewhere accessible.
+	// TODO: delete from object storage 
 	// _ = s.store.Delete(ctx, keyOrig)
 	// _ = s.store.Delete(ctx, keyThumb)
 
@@ -302,19 +300,6 @@ func (s *mediaService) List(
 		return nil, 0, err
 	}
 	return items, total, nil
-}
-
-func extFromMime(mt string) string {
-	switch mt {
-	case "image/jpeg":
-		return "jpeg"
-	case "image/png":
-		return "png"
-	case "image/heic", "image/heif":
-		return "heic"
-	default:
-		return "unsupported media type"
-	}
 }
 
 var _ MediaService = (*mediaService)(nil)
