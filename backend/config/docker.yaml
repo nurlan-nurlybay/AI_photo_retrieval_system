@@ -27,7 +27,7 @@ redis:
   poolSize: 10
 
 seaweedfs:
-  baseURL: "http://localhost:8888"
+  baseURL: "http://localhost:8333"
 
 clip:
   host: "clip-service"

@@ -130,5 +130,5 @@ func (a *App) Run() error {
 
 func (a *App) Close() {
 	a.Logger.Info("closing app resources...")
-	// TODO
+	// TODO close func
 }

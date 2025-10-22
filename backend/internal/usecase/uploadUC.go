@@ -78,65 +78,44 @@ func NewMediaService(
 }
 
 func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInput) ([]ucdto.UploadResult, error) {
-	s.log.InfoContext(ctx, "starting upload batch",
-		"count", len(items),
-	)
-
+	s.log.InfoContext(ctx, "starting upload batch", "count", len(items))
 	out := make([]ucdto.UploadResult, 0, len(items))
 
 	for i, it := range items {
 		s.log.DebugContext(ctx, "processing upload item",
 			"index", i,
+			"filename", it.Filename,
 			"user_id", it.UserID,
 			"mime_type", it.MimeType,
 		)
 
-		// Read all inmemory TODO: streaming/tempfile later
+		// Read all inmemory
+		// TODO: streaming/tempfile later
 		buf := new(bytes.Buffer)
 		if _, err := buf.ReadFrom(it.Body); err != nil {
-			s.log.ErrorContext(ctx, "failed to read request body",
-				"index", i,
-				"user_id", it.UserID,
-				"error", err,
-			)
+			s.log.ErrorContext(ctx, "failed to read request body", "index", i, "error", err)
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
 			continue
 		}
-		s.log.DebugContext(ctx, "read upload body",
-			"index", i,
-			"bytes", buf.Len(),
-		)
+		s.log.DebugContext(ctx, "read upload body", "index", i, "bytes", buf.Len())
 
-		// Exact-byte checksum for idempotency
+		// Compute checksum for idempotency
 		sum := sha256.Sum256(buf.Bytes())
 		check := hex.EncodeToString(sum[:])
-		s.log.DebugContext(ctx, "computed checksum",
-			"index", i,
-			"checksum", check,
-		)
+		s.log.DebugContext(ctx, "checksum computed", "index", i, "checksum", check)
 
-		// Dedup per user (best-effort)
+		// Dedup check
 		existing, err := s.repo.GetByChecksum(ctx, it.UserID, check)
 		if err != nil {
-			s.log.ErrorContext(ctx, "error checking for existing media",
-				"index", i,
-				"user_id", it.UserID,
-				"checksum", check,
-				"error", err,
-			)
+			s.log.ErrorContext(ctx, "dedup lookup failed", "index", i, "error", err)
 		}
 		if existing != nil {
-			s.log.DebugContext(ctx, "duplicate media found, skipping",
-				"index", i,
-				"user_id", it.UserID,
-				"checksum", check,
-				"media_id", existing.ID,
-			)
+			s.log.DebugContext(ctx, "duplicate media found, skipping", "index", i, "media_id", existing.ID)
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusDuplicate, Media: existing})
 			continue
 		}
 
-		// Extract metadata (best-effort)
+		// Metadata extraction
 		meta, _ := s.meta.Extract(buf.Bytes())
 		s.log.DebugContext(ctx, "metadata extracted",
 			"index", i,
@@ -145,60 +124,36 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 			"camera_model", meta.CameraModel,
 		)
 
-		// Auto-orient and make thumb.
+		// Image processing (auto orient and make thumb)
 		oriented, thumb, w, h, err := s.img.Process(buf.Bytes())
 		if err != nil {
-			s.log.ErrorContext(ctx, "image processing failed",
-				"index", i,
-				"user_id", it.UserID,
-				"error", err,
-			)
+			s.log.ErrorContext(ctx, "image processing failed", "index", i, "error", err)
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
 			continue
 		}
-		s.log.DebugContext(ctx, "image processed",
-			"index", i,
-			"width", w,
-			"height", h,
-		)
+		s.log.DebugContext(ctx, "image processed", "index", i, "width", w, "height", h)
 
-		// Store objects. Keys can be anything deterministic
+		// Store original img
 		keyOrig := fmt.Sprintf("media/%d/%s/original", it.UserID, check)
-		keyThumb := fmt.Sprintf("media/%d/%s/thumb.jpg", it.UserID, check)
-
 		origURL, err := s.store.Put(ctx, keyOrig, bytes.NewReader(oriented))
 		if err != nil {
-			s.log.ErrorContext(ctx, "failed to store original image",
-				"index", i,
-				"user_id", it.UserID,
-				"key", keyOrig,
-				"error", err,
-			)
+			s.log.ErrorContext(ctx, "failed to store original", "index", i, "key", keyOrig, "error", err)
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
 			continue
 		}
-		s.log.DebugContext(ctx, "original image stored",
-			"index", i,
-			"url", origURL,
-		)
+		s.log.DebugContext(ctx, "original stored", "index", i, "url", origURL)
 
+		// Store thumb
+		keyThumb := fmt.Sprintf("media/%d/%s/thumb.jpg", it.UserID, check)
 		thumbURL, err := s.store.Put(ctx, keyThumb, bytes.NewReader(thumb))
 		if err != nil {
-			s.log.ErrorContext(ctx, "failed to store thumbnail",
-				"index", i,
-				"user_id", it.UserID,
-				"key", keyThumb,
-				"error", err,
-			)
+			s.log.ErrorContext(ctx, "failed to store thumbnail", "index", i, "key", keyThumb, "error", err)
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
 			continue
 		}
-		s.log.DebugContext(ctx, "thumbnail stored",
-			"index", i,
-			"url", thumbURL,
-		)
+		s.log.DebugContext(ctx, "thumbnail stored", "index", i, "url", thumbURL)
 
-		// Build domain model and persist.
+		// Build domain model and persist in DB
 		m := &domain.Media{
 			UserID:    it.UserID,
 			URL:       origURL,
@@ -219,11 +174,7 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 		}
 
 		if err := s.repo.Create(ctx, m); err != nil {
-			s.log.ErrorContext(ctx, "failed to persist media, cleaning up",
-				"index", i,
-				"user_id", it.UserID,
-				"error", err,
-			)
+			s.log.ErrorContext(ctx, "failed to persist media", "index", i, "error", err)
 			_ = s.store.Delete(ctx, m.URL)
 			_ = s.store.Delete(ctx, m.ThumbURL)
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
@@ -233,32 +184,16 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 		//  enqueue embedding job
 		job := ucdto.EmbedJob{MediaID: m.ID, Modality: "image"}
 		b, _ := json.Marshal(job)
-
 		if err := s.queue.Enqueue(ctx, "jobs:embed", b); err != nil {
-			s.log.ErrorContext(ctx, "failed to enqueue embedding job",
-				"media_id", m.ID,
-				"user_id", it.UserID,
-				"checksum", check,
-				"url", m.URL,
-				"error", err,
-			)
+			s.log.ErrorContext(ctx, "failed to enqueue job", "media_id", m.ID, "error", err)
 		} else {
-			s.log.InfoContext(ctx, "embedding job enqueued",
-				"media_id", m.ID,
-				"user_id", it.UserID,
-				"checksum", check,
-				"url", m.URL,
-				"queue", "jobs:embed",
-			)
+			s.log.DebugContext(ctx, "job enqueued", "media_id", m.ID, "queue", "jobs:embed")
 		}
 
 		out = append(out, ucdto.UploadResult{Status: ucdto.StatusSaved, Media: m})
 	}
 
-	s.log.InfoContext(ctx, "upload batch completed",
-		"total_items", len(items),
-		"results_count", len(out),
-	)
+	s.log.InfoContext(ctx, "upload batch completed", "total", len(items), "results", len(out))
 
 	return out, nil
 }
@@ -268,7 +203,7 @@ func (s *mediaService) Delete(ctx context.Context, userID, id int64) error {
 	if err != nil {
 		return err
 	}
-	// TODO: delete from object storage 
+	// TODO: delete from object storage
 	// _ = s.store.Delete(ctx, keyOrig)
 	// _ = s.store.Delete(ctx, keyThumb)
 

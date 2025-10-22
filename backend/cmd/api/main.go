@@ -1,3 +1,9 @@
+// @title        AI Photo Retrieval System API
+// @version      1.0
+// @description  REST API for searching and uploading images using AI-based embeddings
+// @host         localhost:8080
+// @BasePath     /api
+
 package main
 
 import (

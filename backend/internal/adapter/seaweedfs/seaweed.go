@@ -25,14 +25,17 @@ func NewSeaweedfs(ctx context.Context, url string, client *http.Client) (*Seawee
 func (s *Seaweedfs) Put(ctx context.Context, key string, r *bytes.Reader) (string, error) {
 	url := fmt.Sprintf("%s/%s", s.baseURL, key)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, r)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, r)
 	if err != nil {
-		return "", fmt.Errorf("creating put request: %w", err)
+		return "", fmt.Errorf("create put request: %w", err)
 	}
+
+	// determine mime type dynamically or just set generic
+	req.Header.Set("Content-Type", "application/octet-stream")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("sending put request: %w", err)
+		return "", fmt.Errorf("send put request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -41,7 +44,8 @@ func (s *Seaweedfs) Put(ctx context.Context, key string, r *bytes.Reader) (strin
 		return "", fmt.Errorf("upload failed: %s - %s", resp.Status, string(body))
 	}
 
-	return key, nil
+	// return accessible URL for later retrieval
+	return url, nil
 }
 
 func (s *Seaweedfs) Delete(ctx context.Context, key string) error {

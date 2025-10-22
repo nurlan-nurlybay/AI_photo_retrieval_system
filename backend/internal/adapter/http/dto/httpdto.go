@@ -27,7 +27,7 @@ type MediaResponse struct {
 
 // Upload Image
 type UploadRequest struct {
-	Files []*multipart.FileHeader `form:"files[]" binding:"required,min=1,max=10"`
+	Files []*multipart.FileHeader `form:"files[]" binding:"required,min=1,max=100"`
 	Dedup bool                    `form:"dedup,default=true"`
 }
 
