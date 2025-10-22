@@ -20,7 +20,6 @@ CREATE INDEX IF NOT EXISTS idx_media_user_created_at
 CREATE INDEX IF NOT EXISTS idx_media_user_mime
     ON media (user_id, mime_type);
 
--- Details split out to keep the media table small
 CREATE TABLE IF NOT EXISTS media_metadata (
     media_id            BIGINT PRIMARY KEY REFERENCES media(id) ON DELETE CASCADE,
     datetime_original   TIMESTAMPTZ,
@@ -33,7 +32,7 @@ CREATE TABLE IF NOT EXISTS media_metadata (
     software            TEXT
 );
 
--- Optional helper index to filter by shot date
+-- filter by shot date
 CREATE INDEX IF NOT EXISTS idx_meta_datetime
     ON media_metadata (datetime_original);
 -- +goose StatementEnd

@@ -8,8 +8,8 @@ RUN go mod download
 
 COPY . .
 
-# build binary (stripped)
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o photo-backend ./cmd/server
+# build stripped binary 
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o photo-backend ./cmd/api
 
 # ---- Runtime stage ----
 FROM alpine:3.19

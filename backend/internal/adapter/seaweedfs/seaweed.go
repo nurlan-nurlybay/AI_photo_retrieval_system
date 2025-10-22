@@ -93,7 +93,7 @@ func (s *Seaweedfs) Get(ctx context.Context, key string) ([]byte, error) {
 }
 
 func (s *Seaweedfs) Ping(ctx context.Context) error {
-	url := s.baseURL + "/status"
+	url := s.baseURL + "/healthz"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

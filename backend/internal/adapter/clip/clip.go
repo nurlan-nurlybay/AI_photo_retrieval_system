@@ -108,7 +108,7 @@ func (c *Client) EmbedImage(ctx context.Context, data []byte, filename string) (
 }
 
 func (c *Client) Ping(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/ping", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/healthz", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create ping request: %w", err)
 	}
