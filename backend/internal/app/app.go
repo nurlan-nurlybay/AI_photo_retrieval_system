@@ -79,7 +79,8 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	log.Info("connected to seaweedfs client")
 
 	// Image processing libs
-	imgProc := imageproc.NewVipsProcessor(512, 85)
+	// TODO: cfg for vips and exif
+	imgProc := imageproc.NewVipsProcessor(512, 100)
 	metaExt := metadata.NewExifExtractor()
 
 	// Setup app services
