@@ -32,10 +32,6 @@ func NewClient(ctx context.Context, cfg config.Clip, httpClent *http.Client) (us
 	return client, nil
 }
 
-func (c *Client) Ping(ctx context.Context) error {
-	return nil
-}
-
 func (c *Client) EmbedText(ctx context.Context, text string) ([]float64, error) {
 	reqBody := map[string]string{"text": text}
 	body, err := json.Marshal(reqBody)
@@ -109,4 +105,23 @@ func (c *Client) EmbedImage(ctx context.Context, data []byte, filename string) (
 	}
 
 	return respBody.Vector, nil
+}
+
+func (c *Client) Ping(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/ping", nil)
+	if err != nil {
+		return fmt.Errorf("failed to create ping request: %w", err)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("ping request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("ping returned non-OK status: %d", resp.StatusCode)
+	}
+
+	return nil
 }
