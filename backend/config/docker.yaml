@@ -26,6 +26,9 @@ redis:
   writeTimeout: 1s
   poolSize: 10
 
+seaweedfs:
+  baseURL: "http://localhost:8888"
+
 clip:
   host: "clip-service"
   port: 8001

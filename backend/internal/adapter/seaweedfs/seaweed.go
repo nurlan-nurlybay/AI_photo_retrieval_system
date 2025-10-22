@@ -4,51 +4,111 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 )
 
 type Seaweedfs struct {
 	baseURL string
+	client  *http.Client
 }
 
-func NewSeaweedfs(url string) (*Seaweedfs, error) {
+func NewSeaweedfs(ctx context.Context, url string) (*Seaweedfs, error) {
 	s := &Seaweedfs{baseURL: url}
 
-	if err := s.Ping(); err != nil {
+	if err := s.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("seaweedfs connection failed: %w", err)
 	}
 	return s, nil
 }
 
-func (s *Seaweedfs) Put(ctx context.Context, key string, r *bytes.Reader) (publicURL string, err error) {
-	req, err := http.NewRequest("POST", s.baseURL+"/"+key, r)
+func (s *Seaweedfs) Put(ctx context.Context, key string, r *bytes.Reader) (string, error) {
+	url := fmt.Sprintf("%s/%s", s.baseURL, key)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, r)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("creating put request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("sending put request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("upload failed: %s - %s", resp.Status, string(body))
+	}
 
 	return key, nil
 }
 
 func (s *Seaweedfs) Delete(ctx context.Context, key string) error {
+	url := fmt.Sprintf("%s/%s", s.baseURL, key)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	if err != nil {
+		return fmt.Errorf("creating delete request: %w", err)
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("sending delete request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("delete failed: %s - %s", resp.Status, string(body))
+	}
 
 	return nil
 }
 
-func (s *Seaweedfs) Ping() error {
-	resp, err := http.Get(s.baseURL + "/dir/status")
+func (s *Seaweedfs) Get(ctx context.Context, key string) ([]byte, error) {
+	url := fmt.Sprintf("%s/%s", s.baseURL, key)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("creating get request: %w", err)
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("sending get request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get failed: %s - %s", resp.Status, string(body))
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response: %w", err)
+	}
+
+	return data, nil
+}
+
+func (s *Seaweedfs) Ping(ctx context.Context) error {
+	url := s.baseURL + "/status"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("creating ping request: %w", err)
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("sending ping: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status: %s", resp.Status)
 	}
+
 	return nil
 }
