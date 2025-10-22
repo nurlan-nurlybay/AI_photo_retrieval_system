@@ -54,12 +54,17 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	}
 	log.Info("connected to redis client")
 
-	// TODO: actuall seaweedfs implemnetation
-	// currently store in ./var/uploads/media/1/abc/
-	store, err := seaweedfs.NewLocalFS("./var/uploads", "http://localhost:8080/uploads")
+	// Local storage in ./var/uploads/media/1/abc/
+	// store, err := seaweedfs.NewLocalFS("./var/uploads", "http://localhost:8080/uploads")
+	// if err != nil {
+	// 	log.Fatal("failed to connect to seaweedfs:", err)
+	// }
+	// Seaweedfs init
+	store, err := seaweedfs.NewSeaweedfs(ctx, cfg.Seaweedfs.BaseURL)
 	if err != nil {
-		log.Fatal("failed to connect to seaweedfs:", err)
+		log.Fatal("failed to conn seaweedfs:", err)
 	}
+	log.Info("connected to seaweedfs client")
 
 	// Image processing libs
 	imgProc := imageproc.NewVipsProcessor(512, 85)

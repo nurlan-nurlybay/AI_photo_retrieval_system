@@ -17,6 +17,9 @@ postgres:
   maxIdleConns: 10
   connMaxLifetime: 30m
 
+seaweedfs:
+  baseURL: "http://localhost:8888"
+
 redis:
   addr: "localhost:6379"
   password: ""
