@@ -7,8 +7,10 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	_ "github.com/nurlan-nurlybay/AI_photo_retrieval_system/docs"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
+
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )

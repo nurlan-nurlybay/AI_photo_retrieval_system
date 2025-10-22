@@ -1,5 +1,11 @@
 ### How to setup 
 
+## Apply migration
+Start postgres in docker and use goose migration
+```bash
+goose -dir ./backend/migrations postgres "postgres://postgres:postgres@localhost:5432/media?sslmode=disable" up
+```
+
 ## Init DB
 Prereq: ensure that u have postgres running and create ur actuall db 
 install goose: 

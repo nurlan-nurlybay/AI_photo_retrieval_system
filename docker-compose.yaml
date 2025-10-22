@@ -18,6 +18,30 @@ services:
   #   depends_on: [ml_service, vector_service, seaweedfs]
   #   networks: [clip-net]
 
+  postgres:
+    image: postgres:15
+    container_name: pg
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=media
+    networks: [clip-net]
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweedfs
+    command: "server -dir=/data -volume.max=10 -filer -s3"
+    ports:
+      - "9333:9333"   # master 
+      - "8888:8888"   # filer (HTTP file API) 
+      - "8333:8333"   # S3 gateway 
+      - "18080:18080" # volume UI 
+    volumes:
+      - ./seaweed-data:/data
+    networks: [clip-net]
+
   ml_service:
     build: ./ml_service
     container_name: ml-service
@@ -33,19 +57,6 @@ services:
     depends_on:
       milvus:
         condition: service_healthy
-    networks: [clip-net]
-
-  seaweedfs:
-    image: chrislusf/seaweedfs:latest
-    container_name: seaweedfs
-    command: "server -dir=/data -volume.max=10 -filer -s3"
-    ports:
-      - "9333:9333"   # master (optional)
-      - "8888:8888"   # filer (HTTP file API)  <-- keep this
-      - "8333:8333"   # S3 gateway (optional)
-      - "18080:18080" # volume UI (optional)
-    volumes:
-      - ./seaweed-data:/data
     networks: [clip-net]
 
   etcd:  # metadata storage for milvus

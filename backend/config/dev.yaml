@@ -8,7 +8,8 @@ http:
   idleTimeout: 30s
 
 postgres:
-  host: "172.22.16.1"
+  # hostname -I
+  host: "172.22.17.98"  
   port: 5432
   user: "postgres"
   password: "postgres"
@@ -30,7 +31,7 @@ redis:
   poolSize: 10
 
 seaweedfs:
-  baseURL: "http://localhost:8888"
+  baseURL: "http://localhost:8333"
 
 clip:
   host: "localhost"
@@ -41,6 +42,6 @@ faiss:
   port: 8006
   
 log:
-  level: "info"
+  level: "debug" 
   format: "text"
   sourceFolder: "backend"
