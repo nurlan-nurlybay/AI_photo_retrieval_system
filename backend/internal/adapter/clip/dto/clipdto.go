@@ -16,5 +16,5 @@ type TextRequest struct {
 }
 
 type VectorResponse struct {
-	Vectors [][]float64 `json:"vectors"`
+	Vectors [][]float32 `json:"vectors"`
 }

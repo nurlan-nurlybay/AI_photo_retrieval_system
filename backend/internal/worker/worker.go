@@ -14,11 +14,11 @@ type Queue interface {
 }
 
 type Embedder interface {
-	EmbedImage(ctx context.Context, data []byte) ([]float64, error)
+	EmbedImage(ctx context.Context, data []byte) ([]float32, error)
 }
 
 type VectorIndex interface {
-	Insert(ctx context.Context, id int64, vector []float64) error
+	Insert(ctx context.Context, id int64, vector []float32) error
 }
 
 type Repo interface {
@@ -101,7 +101,7 @@ func (w *EmbedWorker) Run(ctx context.Context) error {
 }
 
 // mediaID
-// get image []byte from seaweedfs 
+// get image []byte from seaweedfs
 // call clip to get vector
 // upsertEmbedding
 func (w *EmbedWorker) processOne(ctx context.Context, job EmbedJob) error {

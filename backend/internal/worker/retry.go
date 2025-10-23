@@ -65,7 +65,7 @@ func (w *RetryWorker) step(ctx context.Context) {
 }
 
 // ===== Helpers =====
-func f64ToLEf32(v []float64) []byte {
+func f64ToLEf32(v []float32) []byte {
 	out := make([]byte, 4*len(v))
 	for i, x := range v {
 		f := float32(x)
@@ -74,12 +74,12 @@ func f64ToLEf32(v []float64) []byte {
 	return out
 }
 
-func bytesToF64LE(b []byte) []float64 {
+func bytesToF64LE(b []byte) []float32 {
 	n := len(b) / 4
-	out := make([]float64, n)
+	out := make([]float32, n)
 	for i := 0; i < n; i++ {
 		u := binary.LittleEndian.Uint32(b[i*4:])
-		out[i] = float64(math.Float32frombits(u))
+		out[i] = float32(math.Float32frombits(u))
 	}
 	return out
 }

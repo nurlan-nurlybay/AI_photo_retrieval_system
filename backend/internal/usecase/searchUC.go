@@ -13,19 +13,19 @@ type SearchService interface {
 
 type (
 	Embedder interface {
-		EmbedText(ctx context.Context, text string) ([]float64, error)
-		EmbedImage(ctx context.Context, data []byte) ([]float64, error)
+		EmbedText(ctx context.Context, text string) ([]float32, error)
+		EmbedImage(ctx context.Context, data []byte) ([]float32, error)
 	}
 
 	VectorIndex interface {
-		Insert(ctx context.Context, id int64, vector []float64) error
-		Search(ctx context.Context, vector []float64, k int) ([]SearchResult, error)
+		Insert(ctx context.Context, id int64, vector []float32) error
+		Search(ctx context.Context, vector []float32, k int) ([]SearchResult, error)
 		Delete(ctx context.Context, id int64) error
 	}
 
 	SearchResult struct {
 		ID    int64
-		Score float64
+		Score float32
 	}
 )
 

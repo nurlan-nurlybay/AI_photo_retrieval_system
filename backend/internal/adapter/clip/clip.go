@@ -33,7 +33,7 @@ func NewClient(ctx context.Context, cfg config.Clip, httpClent *http.Client) (us
 	return client, nil
 }
 
-func (c *Client) EmbedText(ctx context.Context, text string) ([]float64, error) {
+func (c *Client) EmbedText(ctx context.Context, text string) ([]float32, error) {
 	url := c.baseURL + "/v1/encode/text/"
 
 	// TODO: why the fuck list of texts ?
@@ -78,10 +78,11 @@ func (c *Client) EmbedText(ctx context.Context, text string) ([]float64, error) 
 		return nil, errors.New("invalid vector length")
 	}
 
-	return respBody.Vectors[0], nil}
+	return respBody.Vectors[0], nil
+}
 
 // TODO: fix
-func (c *Client) EmbedImage(ctx context.Context, data []byte) ([]float64, error) {
+func (c *Client) EmbedImage(ctx context.Context, data []byte) ([]float32, error) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 	part, err := writer.CreateFormFile("file", "blob") // do not care for filename
@@ -110,7 +111,7 @@ func (c *Client) EmbedImage(ctx context.Context, data []byte) ([]float64, error)
 	}
 
 	var respBody struct {
-		Vector []float64 `json:"vector"`
+		Vector []float32 `json:"vector"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)

@@ -9,8 +9,8 @@ import (
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss"
 )
 
-func makeVec(val float64) []float64 {
-	v := make([]float64, 512) // CLIP embedding size
+func makeVec(val float32) []float32 {
+	v := make([]float32, 512) // CLIP embedding size
 	for i := range v {
 		v[i] = val
 	}
@@ -24,7 +24,7 @@ func TestInsert_RealService(t *testing.T) {
 		&http.Client{},
 	)
 
-	// 512-d float64 vector
+	// 512-d float32 vector
 	vec := makeVec(0.0)
 
 	t.Logf("sending vector of length %d", len(vec))
