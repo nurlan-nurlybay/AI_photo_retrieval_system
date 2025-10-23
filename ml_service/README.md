@@ -14,7 +14,16 @@ uvicorn app.main:app --host 0.0.0.0 --port 8003
 ```bash
 curl -X POST http://localhost:8005/v1/encode/text/ \
   -H "Content-Type: application/json" \
-  -d '{"text":"a red car"}'
+  -d '{
+    "req": {
+      "texts": ["a red car"]
+    },
+    "options": {
+      "model": "openai/clip-vit-base-patch32",
+      "normalize": true,
+      "quantize": false
+    }
+  }'
 ```
 **Response**
 ```json
