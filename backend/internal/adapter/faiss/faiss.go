@@ -36,7 +36,7 @@ func NewClient(ctx context.Context, cfg config.Faiss, httpClient *http.Client) (
 	return client, nil
 }
 
-func (c *Client) Insert(ctx context.Context, id int64, vector []float64) error {
+func (c *Client) Insert(ctx context.Context, id int64, vector []float32) error {
 	if len(vector) == 0 {
 		return fmt.Errorf("cannot insert empty vector for media_id=%d", id)
 	}
@@ -93,7 +93,7 @@ func (c *Client) Insert(ctx context.Context, id int64, vector []float64) error {
 	return nil
 }
 
-func (c *Client) Search(ctx context.Context, vector []float64, k int) ([]usecase.SearchResult, error) {
+func (c *Client) Search(ctx context.Context, vector []float32, k int) ([]usecase.SearchResult, error) {
 	req := faissdto.VectorSearchRequest{
 		Vector:    vector,
 		K:         k,
