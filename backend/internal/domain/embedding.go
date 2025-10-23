@@ -3,6 +3,8 @@ package domain
 import (
 	"encoding/binary"
 	"math"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -47,4 +49,15 @@ func TruncateErr(err error) string {
 		return msg[:maxErrLen]
 	}
 	return msg
+}
+
+func ExtractS3Key(mediaURL string) (string, error) {
+	u, err := url.Parse(mediaURL)
+	if err != nil {
+		return "", err
+	}
+
+	// remove leading slash in u.Path
+	key := strings.TrimPrefix(u.Path, "/") // u.path = "media/404/ba94.../original.jpg"
+	return key, nil
 }

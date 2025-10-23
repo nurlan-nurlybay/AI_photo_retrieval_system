@@ -38,6 +38,14 @@ curl -X POST http://localhost:8080/api/upload/image \
   -v
 ```
 
+```bash
+curl -X POST http://localhost:8080/api/upload/image \
+  -F "files[]=@/Users/fredddhdjd/prj/AI_photo_retrieval_system/backend/test/pic1.jpg" \
+  -F "files[]=@/Users/fredddhdjd/prj/AI_photo_retrieval_system/backend/test/pic2.jpg" \
+  -F "files[]=@/Users/fredddhdjd/prj/AI_photo_retrieval_system/backend/test/pic3.png" \
+  -v
+```
+
 ### Search route
 ```bash
 curl -X POST "http://localhost:8080/api/search/text" \

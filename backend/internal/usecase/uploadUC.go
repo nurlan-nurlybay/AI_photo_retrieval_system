@@ -174,7 +174,8 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 			},
 		}
 
-		if err := s.repo.Create(ctx, m); err != nil {
+		mediaID, err := s.repo.Create(ctx, m)
+		if err != nil {
 			s.log.ErrorContext(ctx, "failed to persist media", "index", i, "error", err)
 			_ = s.store.Delete(ctx, m.URL)
 			_ = s.store.Delete(ctx, m.ThumbURL)
@@ -183,7 +184,11 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 		}
 
 		//  enqueue embedding job
-		job := ucdto.EmbedJob{UserID: m.UserID, MediaID: m.ID, Modality: "image"}
+		job := ucdto.EmbedJob{
+			UserID:   m.UserID,
+			MediaID:  mediaID,
+			Modality: "image",
+		}
 		b, _ := json.Marshal(job)
 		if err := s.queue.Enqueue(ctx, "jobs:embed", b); err != nil {
 			s.log.ErrorContext(ctx, "failed to enqueue job", "media_id", m.ID, "error", err)

@@ -47,7 +47,7 @@ func NewMediaRepo(db db.Client) *MediaRepo {
 	}
 }
 
-func (r *MediaRepo) Create(ctx context.Context, m *domain.Media) error {
+func (r *MediaRepo) Create(ctx context.Context, m *domain.Media) (int64, error) {
 	query, args, err := squirrel.
 		Insert(TableName).
 		Columns(
@@ -62,10 +62,11 @@ func (r *MediaRepo) Create(ctx context.Context, m *domain.Media) error {
 			m.Metadata.CameraMake, m.Metadata.CameraModel,
 			m.Metadata.Software, m.Metadata.Orientation,
 		).
+		Suffix("RETURNING id").
 		PlaceholderFormat(squirrel.Dollar).
 		ToSql()
 	if err != nil {
-		return fmt.Errorf("build media insert: %w", err)
+		return 0, fmt.Errorf("build media insert: %w", err)
 	}
 
 	q := db.Query{
@@ -73,19 +74,20 @@ func (r *MediaRepo) Create(ctx context.Context, m *domain.Media) error {
 		QueryRaw: query,
 	}
 
-	_, err = r.db.DB().ExecContext(ctx, q, args...)
+	var id int64
+	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&id)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.ConstraintName == r.uniqUserChecksum {
-			return &domain.DomainError{
+			return 0, &domain.DomainError{
 				Code: domain.ErrMediaAlreadyExists.Code,
 				Msg:  domain.ErrMediaAlreadyExists.Msg,
 			}
 		}
-		return fmt.Errorf("exec media insert: %w", err)
+		return 0, fmt.Errorf("exec media insert: %w", err)
 	}
 
-	return nil
+	return id, nil
 }
 
 func (r *MediaRepo) Get(ctx context.Context, userID, mediaID int64) (*domain.Media, error) {
