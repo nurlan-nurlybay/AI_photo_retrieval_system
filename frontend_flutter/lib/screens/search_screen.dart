@@ -18,7 +18,7 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _isSearching = false;
   String _lastQuery = '';
   String _status = '';
-  
+
   // Image search variables
   File? _selectedImage;
   final ImagePicker _picker = ImagePicker();
@@ -44,7 +44,10 @@ class _SearchScreenState extends State<SearchScreen> {
     });
 
     try {
-      final results = await ApiService.searchText(query, similarityThreshold: _similarityThreshold);
+      final results = await ApiService.searchText(
+        query,
+        userId: 404,
+      );
       setState(() {
         _searchResults = results;
         _lastQuery = query;
@@ -78,7 +81,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Future<void> _searchByImage() async {
     if (_selectedImage == null) return;
-    
+
     setState(() {
       _isSearching = true;
       _status = 'Searching with image...';
@@ -86,7 +89,11 @@ class _SearchScreenState extends State<SearchScreen> {
     });
 
     try {
-      final results = await ApiService.searchByImage(_selectedImage!, similarityThreshold: _similarityThreshold);
+      final results = await ApiService.searchByImage(
+        _selectedImage!,
+        userId: 404, // your actual user ID here
+      );
+
       setState(() {
         _searchResults = results;
         _lastQuery = 'image search';
@@ -158,7 +165,8 @@ class _SearchScreenState extends State<SearchScreen> {
                 TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    hintText: 'Search for images (e.g., "cat pictures", "beach sunset")',
+                    hintText:
+                        'FUCK THIS SHIT (e.g., "cat pictures", "beach sunset")',
                     prefixIcon: const Icon(Icons.search),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
@@ -189,11 +197,13 @@ class _SearchScreenState extends State<SearchScreen> {
                             height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
                         : const Icon(Icons.search),
-                    label: Text(_isSearching ? 'Searching...' : 'Search by Text'),
+                    label:
+                        Text(_isSearching ? 'Searching...' : 'Search by Text'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue,
                       foregroundColor: Colors.white,
@@ -201,11 +211,11 @@ class _SearchScreenState extends State<SearchScreen> {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
                 const Divider(),
                 const SizedBox(height: 16),
-                
+
                 // Image Search Section
                 const Text(
                   'Search by Image',
@@ -216,7 +226,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                
+
                 // Similarity Threshold
                 Row(
                   children: [
@@ -236,9 +246,9 @@ class _SearchScreenState extends State<SearchScreen> {
                     Text('${(_similarityThreshold * 100).round()}%'),
                   ],
                 ),
-                
+
                 const SizedBox(height: 12),
-                
+
                 // Image picker and search buttons
                 Row(
                   children: [
@@ -257,7 +267,9 @@ class _SearchScreenState extends State<SearchScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: _selectedImage != null && !_isSearching ? _searchByImage : null,
+                        onPressed: _selectedImage != null && !_isSearching
+                            ? _searchByImage
+                            : null,
                         icon: const Icon(Icons.search),
                         label: const Text('Search by Image'),
                         style: ElevatedButton.styleFrom(
@@ -269,7 +281,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     ),
                   ],
                 ),
-                
+
                 // Selected image preview
                 if (_selectedImage != null) ...[
                   const SizedBox(height: 16),
@@ -299,14 +311,16 @@ class _SearchScreenState extends State<SearchScreen> {
               decoration: BoxDecoration(
                 color: _status.contains('failed') || _status.contains('Error')
                     ? Colors.red[50]
-                    : _status.contains('Found') || _status.contains('No results')
+                    : _status.contains('Found') ||
+                            _status.contains('No results')
                         ? Colors.blue[50]
                         : Colors.grey[100],
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: _status.contains('failed') || _status.contains('Error')
                       ? Colors.red[200]!
-                      : _status.contains('Found') || _status.contains('No results')
+                      : _status.contains('Found') ||
+                              _status.contains('No results')
                           ? Colors.blue[200]!
                           : Colors.grey[300]!,
                 ),
@@ -316,7 +330,8 @@ class _SearchScreenState extends State<SearchScreen> {
                 style: TextStyle(
                   color: _status.contains('failed') || _status.contains('Error')
                       ? Colors.red[800]
-                      : _status.contains('Found') || _status.contains('No results')
+                      : _status.contains('Found') ||
+                              _status.contains('No results')
                           ? Colors.blue[800]
                           : Colors.black87,
                   fontWeight: FontWeight.w500,
@@ -333,7 +348,9 @@ class _SearchScreenState extends State<SearchScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          _lastQuery.isEmpty ? Icons.search : Icons.image_not_supported,
+                          _lastQuery.isEmpty
+                              ? Icons.search
+                              : Icons.image_not_supported,
                           size: 64,
                           color: Colors.grey[400],
                         ),
@@ -362,7 +379,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   )
                 : GridView.builder(
                     padding: const EdgeInsets.all(16),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,

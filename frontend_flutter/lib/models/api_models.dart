@@ -1,13 +1,14 @@
 class SearchResponse {
   final List<SearchResult> data;
+  final int total;
 
-  SearchResponse({required this.data});
+  SearchResponse({required this.data, required this.total});
 
   factory SearchResponse.fromJson(Map<String, dynamic> json) {
-    // Handle case where data is null (no results found)
-    final dataList = json['data'] as List?;
+    final list = json['results'] as List?;
     return SearchResponse(
-      data: dataList?.map((item) => SearchResult.fromJson(item)).toList() ?? [],
+      data: list?.map((e) => SearchResult.fromJson(e)).toList() ?? [],
+      total: (json['total'] as int?) ?? 0,
     );
   }
 }
@@ -27,10 +28,10 @@ class SearchResult {
 
   factory SearchResult.fromJson(Map<String, dynamic> json) {
     return SearchResult(
-      id: json['ID'],
-      userId: json['UserID'],
-      url: json['URL'],
-      thumbUrl: json['ThumbURL'],
+      id: (json['id'] as int?) ?? 0,
+      userId: (json['user_id'] as int?) ?? 0,
+      url: json['url'] ?? '',
+      thumbUrl: json['thumb_url'] ?? '',
     );
   }
 }
