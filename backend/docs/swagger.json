@@ -1,0 +1,160 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "REST API for searching and uploading images using AI-based embeddings",
+        "title": "AI Photo Retrieval System API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/api",
+    "paths": {
+        "/api/upload/image": {
+            "post": {
+                "description": "Uploads between 1 and 100 images in a single multipart/form-data request.\n- Each file must be a JPEG or PNG.\n- The `dedup` parameter can be used to enable or disable duplicate image checking.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "media"
+                ],
+                "summary": "Upload multiple images",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "An array of image files (JPEG/PNG)",
+                        "name": "files",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Enable duplicate check (default: true)",
+                        "name": "dedup",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/httpdto.UploadResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request or file format",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "httpdto.UploadItem": {
+            "type": "object",
+            "properties": {
+                "checksum": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "description": "RFC3339",
+                    "type": "string"
+                },
+                "height": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "mime_type": {
+                    "type": "string"
+                },
+                "size_bytes": {
+                    "type": "integer"
+                },
+                "taken_at": {
+                    "description": "RFC3339, empty if unknown",
+                    "type": "string"
+                },
+                "thumb_url": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                },
+                "width": {
+                    "type": "integer"
+                }
+            }
+        },
+        "httpdto.UploadResponse": {
+            "type": "object",
+            "properties": {
+                "results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/httpdto.UploadResult"
+                    }
+                },
+                "summary": {
+                    "type": "object",
+                    "properties": {
+                        "duplicates": {
+                            "type": "integer"
+                        },
+                        "failed": {
+                            "type": "integer"
+                        },
+                        "saved": {
+                            "type": "integer"
+                        },
+                        "total": {
+                            "type": "integer"
+                        }
+                    }
+                }
+            }
+        },
+        "httpdto.UploadResult": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "description": "present if Status == \"failed\"",
+                    "type": "string"
+                },
+                "filename": {
+                    "type": "string"
+                },
+                "media": {
+                    "description": "present if saved or duplicate",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/httpdto.UploadItem"
+                        }
+                    ]
+                },
+                "status": {
+                    "description": "\"saved\" | \"duplicate\" | \"failed\" | \"skipped\"",
+                    "type": "string"
+                }
+            }
+        }
+    }
+}

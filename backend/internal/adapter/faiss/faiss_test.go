@@ -132,10 +132,10 @@ func postJSONResp(url string, body any, out any) error {
 
 type SearchResult struct {
 	ID    int64   `json:"id"`
-	Score float64 `json:"score"`
+	Score float32 `json:"score"`
 }
 
-func searchVectors(t *testing.T, vec []float64, k int) []SearchResult {
+func searchVectors(t *testing.T, vec []float32, k int) []SearchResult {
 	req := map[string]any{"vector": vec, "k": k}
 	var resp struct {
 		Results []SearchResult `json:"results"`

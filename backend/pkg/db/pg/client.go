@@ -12,18 +12,15 @@ type pgClient struct {
 	masterDBC db.DB
 }
 
-func New(ctx context.Context, dsn string) (db.Client, error) {
-	pgxCfg, err := pgxpool.ParseConfig(dsn)
+func New(ctx context.Context, dsn string,
+	logQuery func(ctx context.Context, q db.Query, args ...interface{}),
+) (db.Client, error) {
+	dbc, err := pgxpool.New(ctx, dsn)
 	if err != nil {
-		return nil, errors.Errorf("parse config: %v", err)
+		return nil, errors.Errorf("failed to connect to db: %v", err)
 	}
 
-	dbc, err := pgxpool.NewWithConfig(ctx, pgxCfg)
-	if err != nil {
-		return nil, errors.Errorf("connect to db: %v", err)
-	}
-
-	return &pgClient{masterDBC: &pg{dbc: dbc}}, nil
+	return &pgClient{masterDBC: NewDB(dbc, logQuery)}, nil
 }
 
 func (c *pgClient) DB() db.DB {

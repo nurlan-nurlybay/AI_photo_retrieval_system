@@ -29,6 +29,7 @@ type UploadResult struct {
 }
 
 type EmbedJob struct {
+	UserID   int64  `json:"user_id"`
 	MediaID  int64  `json:"media_id"`
-	Modality string `json:"modality"` // "image" now; "text" later if you add captions
+	Modality string `json:"modality"` // "image" now; TODO: "text"
 }

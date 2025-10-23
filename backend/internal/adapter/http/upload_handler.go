@@ -26,18 +26,30 @@ func NewImageHandler(image usecase.MediaService, v *validator.Validate, l *logge
 		uploadUC:  image,
 		validator: v,
 		logger:    l,
-		maxFiles:  10,
+		maxFiles:  100,
 	}
 }
 
+// @Summary      Upload multiple images
+// @Description  Uploads between 1 and 100 images in a single multipart/form-data request.
+// @Description  - Each file must be a JPEG or PNG.
+// @Description  - The `dedup` parameter can be used to enable or disable duplicate image checking.
+// @Tags         media
+// @Accept       multipart/form-data
+// @Produce      json
+// @Param        files  formData  file  true  "An array of image files (JPEG/PNG)"  collectionFormat:"multi"
+// @Param        dedup  formData  bool  false "Enable duplicate check (default: true)"
+// @Success      200    {object}  httpdto.UploadResponse
+// @Failure      400    {object}  map[string]string "Invalid request or file format"
+// @Failure      500    {object}  map[string]string "Internal server error"
+// @Router       /api/upload/image [post]
 func (h *ImageHandler) ImageUpload(c *gin.Context) {
 	log := h.logger.With("handler", "ImageUpload")
 	log.Info("received req")
 
 	userID := c.GetInt64("userID")
-	if userID == 0 {
-		userID = 404
-	}
+	// TODO use real userID
+	userID = 404
 
 	var req httpdto.UploadRequest
 	if err := c.ShouldBind(&req); err != nil {

@@ -1,24 +1,63 @@
-version: "3.9"
-
 name: ai-photo-retrieval
 
 services:
   api:
-    build: ./api
-    container_name: api-gateway
-    ports: ["8080:8080"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend-api
+    command: ["./photo-backend", "--config=/config/docker.yaml"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+      - seaweedfs
+      - ml_service
+      - vector_service
     environment:
-      ML_URL: "http://ml_service:8003"
-      VS_URL: "http://vector_service:8002"
-      # SeaweedFS
-      FILER_URL: "http://seaweedfs:8888"
-      # What URL the client should use to download images:
-      PUBLIC_IMAGE_BASE: "http://localhost:8888"
-      META_PATH: "/data/metadata_store.json"
+      - CONFIG_PATH=/config/docker.yaml
     volumes:
-      - ./api_data:/data            # persist metadata JSON
-    depends_on: [ml_service, vector_service, seaweedfs]
+      - ./backend/config:/config
+    networks:
+      - clip-net
+
+  postgres:
+    image: postgres:15
+    container_name: pg
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=media
+    volumes:
+      - ./volumes/pg:/var/lib/postgresql/data
     networks: [clip-net]
+  
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweedfs
+    command: "server -dir=/data -volume.max=10 -filer -s3"
+    ports:
+      - "9333:9333"   # master 
+      - "8888:8888"   # filer (HTTP file API) 
+      - "8333:8333"   # S3 gateway 
+      - "18080:18080" # volume UI 
+    volumes:
+      - ./seaweed-data:/data
+    networks: [clip-net]
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6380:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    networks: [clip-net]
+
 
   ml_service:
     build: ./ml_service
@@ -35,20 +74,6 @@ services:
     depends_on:
       milvus:
         condition: service_healthy
-    networks: [clip-net]
-
-  seaweedfs:
-    image: chrislusf/seaweedfs:latest
-    container_name: seaweedfs
-    command: "server -dir=/data -volume.max=10 -filer -s3"
-    ports:
-      - "9333:9333"   # master (optional)
-      - "8888:8888"   # filer (HTTP file API)  <-- keep this
-      - "8333:8333"   # S3 gateway (optional)
-      - "18080:18080" # volume UI (optional)
-    # - "8080:8080" # <-- REMOVE this; it conflicts with your API
-    volumes:
-      - ./seaweed-data:/data
     networks: [clip-net]
 
   etcd:  # metadata storage for milvus
@@ -104,3 +129,6 @@ services:
 networks:
   clip-net:
     name: clip-net
+
+volumes:
+  redis-data:

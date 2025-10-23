@@ -12,12 +12,13 @@ type (
 	Config struct {
 		Version string `yaml:"version"`
 
-		HTTP     HTTP     `yaml:"http"`
-		Postgres Postgres `yaml:"postgres"`
-		Redis    Redis    `yaml:"redis"`
-		Clip     Clip     `yaml:"clip"`
-		Faiss    Faiss    `yaml:"faiss"`
-		Log      Log      `yaml:"log"`
+		HTTP      HTTP      `yaml:"http"`
+		Postgres  Postgres  `yaml:"postgres"`
+		Redis     Redis     `yaml:"redis"`
+		Seaweedfs Seaweedfs `yaml:"seaweedfs"`
+		Clip      Clip      `yaml:"clip"`
+		Faiss     Faiss     `yaml:"faiss"`
+		Log       Log       `yaml:"log"`
 	}
 
 	HTTP struct {
@@ -52,17 +53,18 @@ type (
 		PoolSize     int           `yaml:"poolSize"`
 	}
 
+	Seaweedfs struct {
+		BaseURL string `yaml:"baseURL"`
+	}
+
 	Clip struct {
-		Host        string        `yaml:"host"` // clip-service
-		Port        uint16        `yaml:"port"` // 9000
-		Timeout     time.Duration `yaml:"timeout"`
-		MaxIdleConn int           `yaml:"maxIdleConn"` // optional
+		Host string `yaml:"host"` // clip-service
+		Port uint16 `yaml:"port"` // 9000
 	}
 
 	Faiss struct {
-		Host    string        `yaml:"host"` // faiss-service
-		Port    uint16        `yaml:"port"` // 9000
-		Timeout time.Duration `yaml:"timeout"`
+		Host string `yaml:"host"` // faiss-service
+		Port uint16 `yaml:"port"` // 9000
 	}
 
 	Log struct {
