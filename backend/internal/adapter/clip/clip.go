@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 
@@ -83,45 +84,48 @@ func (c *Client) EmbedText(ctx context.Context, text string) ([]float32, error) 
 
 // TODO: fix
 func (c *Client) EmbedImage(ctx context.Context, data []byte) ([]float32, error) {
-	var buf bytes.Buffer
-	writer := multipart.NewWriter(&buf)
-	part, err := writer.CreateFormFile("file", "blob") // do not care for filename
-	if err != nil {
-		return nil, fmt.Errorf("create form file: %w", err)
-	}
-	if _, err := part.Write(data); err != nil {
-		return nil, fmt.Errorf("write file: %w", err)
-	}
-	writer.Close()
+	url := c.baseURL + "/v1/encode/image/?model=openai/clip-vit-base-patch32&normalize=true"
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/v1/encode/image", &buf)
+	var b bytes.Buffer
+	w := multipart.NewWriter(&b)
+
+	// Create form file part
+	fw, err := w.CreateFormFile("files", "image.jpg")
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, fmt.Errorf("create form file failed: %w", err)
 	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if _, err := fw.Write(data); err != nil {
+		return nil, fmt.Errorf("write image bytes failed: %w", err)
+	}
+	w.Close()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &b)
+	if err != nil {
+		return nil, fmt.Errorf("create req failed: %w", err)
+	}
+	req.Header.Set("Content-Type", w.FormDataContentType())
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("post request: %w", err)
+		return nil, fmt.Errorf("post req failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("python service returned %s", resp.Status)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("clip service returned %s: %s", resp.Status, string(bodyBytes))
 	}
 
-	var respBody struct {
-		Vector []float32 `json:"vector"`
-	}
+	var respBody clipdto.VectorResponse
 	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+		return nil, fmt.Errorf("decode failed: %w", err)
 	}
 
-	if len(respBody.Vector) != 512 {
+	if len(respBody.Vectors) == 0 || len(respBody.Vectors[0]) != 512 {
 		return nil, errors.New("invalid vector length")
 	}
 
-	return respBody.Vector, nil
+	return respBody.Vectors[0], nil
 }
 
 func (c *Client) Ping(ctx context.Context) error {

@@ -42,7 +42,7 @@ type Sort struct {
 }
 
 type MediaRepository interface {
-	Create(ctx context.Context, m *Media) error
+	Create(ctx context.Context, m *Media) (int64, error)
 	Delete(ctx context.Context, uID, mID int64) error
 	Get(ctx context.Context, uID, mID int64) (*Media, error)
 	List(ctx context.Context, f MediaFilter, p Page, s Sort) ([]*Media, int, error)
