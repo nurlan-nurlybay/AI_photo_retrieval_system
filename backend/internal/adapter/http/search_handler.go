@@ -36,7 +36,24 @@ func (h *SearchHandler) SearchByText(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"data": mediaWithScore})
+	var resp httpdto.SearchResponse
+	resp.Results = make([]httpdto.MediaResponse, 0, len(mediaWithScore))
+
+	for _, r := range mediaWithScore {
+		if r.Media == nil {
+			continue
+		}
+		resp.Results = append(resp.Results, httpdto.MediaResponse{
+			ID:       r.Media.ID,
+			UserID:   r.Media.UserID,
+			URL:      r.Media.URL,
+			ThumbURL: r.Media.ThumbURL,
+			Score:    r.Score,
+		})
+	}
+	resp.Total = len(resp.Results)
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *SearchHandler) SearchByImage(c *gin.Context) {
@@ -73,7 +90,24 @@ func (h *SearchHandler) SearchByImage(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, mediaWithScore)
+	var resp httpdto.SearchResponse
+	resp.Results = make([]httpdto.MediaResponse, 0, len(mediaWithScore))
+
+	for _, r := range mediaWithScore {
+		if r.Media == nil {
+			continue
+		}
+		resp.Results = append(resp.Results, httpdto.MediaResponse{
+			ID:       r.Media.ID,
+			UserID:   r.Media.UserID,
+			URL:      r.Media.URL,
+			ThumbURL: r.Media.ThumbURL,
+			Score:    r.Score,
+		})
+	}
+	resp.Total = len(resp.Results)
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *SearchHandler) handleError(c *gin.Context, err error) {
