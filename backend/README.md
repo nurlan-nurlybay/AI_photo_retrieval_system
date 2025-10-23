@@ -44,3 +44,10 @@ curl -X POST "http://localhost:8080/api/search/text" \
   -H "Content-Type: application/json" \
   -d '{"user_id":404, "q":"cat pictures"}'
 ```
+
+```bash
+curl -X POST "http://localhost:8080/api/search/image" \
+  -H "Content-Type: application/json" \
+  -F "image=@/home/nero/testdata/pic3.jpg" \
+  -d '{"user_id":404}'
+```

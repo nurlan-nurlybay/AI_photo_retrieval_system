@@ -2,7 +2,7 @@ package httpdto
 
 import "mime/multipart"
 
-// Search Image
+// ===== Search Image =====
 type SearchTextRequest struct {
 	UserID int64  `json:"user_id" binding:"required"`
 	Query  string `json:"q" binding:"required,min=2,max=200"`
@@ -13,22 +13,20 @@ type SearchImageRequest struct {
 	File   *multipart.FileHeader `form:"image" binding:"required"`
 }
 
-// Unified response for both text and image search
 type SearchResponse struct {
 	Results []MediaResponse `json:"results"`
 	Total   int             `json:"total"`
 }
 
-// Each media item now includes similarity score
 type MediaResponse struct {
 	ID       int64   `json:"id"`
 	UserID   int64   `json:"user_id"`
 	URL      string  `json:"url"`
 	ThumbURL string  `json:"thumb_url"`
-	Score    float32 `json:"score,omitempty"` // <-- added field
+	Score    float32 `json:"score,omitempty"`
 }
 
-// Upload Image
+// ===== Upload Image =====
 type UploadRequest struct {
 	Files []*multipart.FileHeader `form:"files[]" binding:"required,min=1,max=100"`
 	Dedup bool                    `form:"dedup,default=true"`
@@ -57,11 +55,9 @@ type UploadItem struct {
 	ThumbURL  string `json:"thumb_url"`
 	MimeType  string `json:"mime_type"`
 	SizeBytes int64  `json:"size_bytes"`
-
-	CreatedAt string `json:"created_at"`         // RFC3339
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	Checksum  string `json:"checksum"`
 	TakenAt   string `json:"taken_at,omitempty"` // RFC3339, empty if unknown
-
-	Width    int    `json:"width"`
-	Height   int    `json:"height"`
-	Checksum string `json:"checksum"`
+	CreatedAt string `json:"created_at"`         // RFC3339
 }

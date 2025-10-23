@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/utils"
 )
 
 // sweep pending/failed, replay to FAISS, set status
@@ -48,17 +48,17 @@ func (w *RetryWorker) step(ctx context.Context) {
 	for _, mediaID := range ids {
 		vb, err := w.EmbeddingsRepo.GetEmbeddingBytes(ctx, 0, mediaID)
 		if err != nil || len(vb) == 0 {
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, domain.TruncateErr(err))
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, utils.TruncateErr(err))
 			continue
 		}
-		vec := domain.BytesToFloat32(vb)
+		vec := utils.BytesToFloat32(vb)
 
 		if err := w.Faiss.Insert(ctx, 404, mediaID, vec); err != nil {
 			if isAlreadyExists(err, w.AlreadyExistsSubstrings) {
 				_ = w.EmbeddingsRepo.MarkInIndex(ctx, 404, mediaID)
 				continue
 			}
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, domain.TruncateErr(err))
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, utils.TruncateErr(err))
 			continue
 		}
 		_ = w.EmbeddingsRepo.MarkInIndex(ctx, 404, mediaID)

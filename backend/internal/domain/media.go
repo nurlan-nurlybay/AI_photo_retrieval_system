@@ -51,15 +51,6 @@ type MediaRepository interface {
 	GetByChecksum(ctx context.Context, uID int64, checksum string) (*Media, error)
 }
 
-type Embedder interface {
-	EmbedText(text string) ([]float32, error)
-	EmbedImage(data []byte) ([]float32, error)
-}
-
-type VectorIndex interface {
-	Search(deviceID string, embedding []float32, k int) ([]string, error)
-}
-
 type MediaWithScore struct {
 	Media *Media
 	Score float32
