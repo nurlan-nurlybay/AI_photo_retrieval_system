@@ -9,6 +9,7 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/worker"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/db"
 )
 
@@ -25,6 +26,8 @@ const (
 	EmbUpdatedCol  = "updated_at"
 )
 
+var _ worker.EmbeddingsRepo = (*EmbeddingsRepo)(nil)
+
 type EmbeddingsRepo struct {
 	db db.Client
 }
@@ -33,7 +36,7 @@ func NewEmbeddingsRepo(db db.Client) *EmbeddingsRepo {
 	return &EmbeddingsRepo{db: db}
 }
 
-func (r *EmbeddingsRepo) Create(ctx context.Context, emb *domain.Embedding) error {
+func (r *EmbeddingsRepo) UpsertEmbedding(ctx context.Context, emb *domain.Embedding) error {
 	query, args, err := squirrel.
 		Insert(EmbTableName).
 		Columns(
@@ -62,7 +65,7 @@ func (r *EmbeddingsRepo) Create(ctx context.Context, emb *domain.Embedding) erro
 	return nil
 }
 
-func (r *EmbeddingsRepo) Get(ctx context.Context, userID, mediaID int64) (*domain.Embedding, error) {
+func (r *EmbeddingsRepo) GetEmbedding(ctx context.Context, userID, mediaID int64) (*domain.Embedding, error) {
 	query, args, err := squirrel.
 		Select(
 			EmbMediaIDCol, EmbUserIDCol, EmbModelCol, EmbVecBytesCol,
@@ -99,7 +102,7 @@ func (r *EmbeddingsRepo) Get(ctx context.Context, userID, mediaID int64) (*domai
 	return &emb, nil
 }
 
-func (r *EmbeddingsRepo) Delete(ctx context.Context, userID, mediaID int64) error {
+func (r *EmbeddingsRepo) DeleteEmbedding(ctx context.Context, userID, mediaID int64) error {
 	query, args, err := squirrel.
 		Delete(EmbTableName).
 		Where(squirrel.Eq{EmbMediaIDCol: mediaID, EmbUserIDCol: userID}).
@@ -158,4 +161,62 @@ func (r *EmbeddingsRepo) updateStatus(ctx context.Context, userID, mediaID int64
 		return fmt.Errorf("exec emb status update: %w", err)
 	}
 	return nil
+}
+
+// rows where status IN ('pending','failed')
+// userID=0 to set global search
+func (r *EmbeddingsRepo) ListUnindexed(ctx context.Context, userID int64, limit int) ([]int64, error) {
+	qb := squirrel.
+		Select(EmbMediaIDCol).
+		From(EmbTableName).
+		Where(squirrel.Eq{
+			EmbStatusCol: []string{"pending", "failed"},
+		}).
+		OrderBy(fmt.Sprintf("%s DESC", EmbUpdatedCol)).
+		Limit(uint64(limit)).
+		PlaceholderFormat(squirrel.Dollar)
+
+	// Only add user filter if userID > 0
+	if userID > 0 {
+		qb = qb.Where(squirrel.Eq{EmbUserIDCol: userID})
+	}
+
+	query, args, err := qb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build list unindexed: %w", err)
+	}
+
+	q := db.Query{
+		Name:     "Emb.ListUnindexed",
+		QueryRaw: query,
+	}
+
+	rows, err := r.db.DB().QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query list unindexed: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan unindexed id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+
+	return ids, rows.Err()
+}
+
+func (r *EmbeddingsRepo) GetEmbeddingBytes(ctx context.Context, userID, mediaID int64) ([]byte, error) {
+	emb, err := r.GetEmbedding(ctx, userID, mediaID)
+	if err != nil {
+		return nil, err
+	}
+	if emb == nil {
+		return nil, fmt.Errorf("embedding not found for user=%d media=%d", userID, mediaID)
+	}
+
+	return emb.VecBytes, nil
 }

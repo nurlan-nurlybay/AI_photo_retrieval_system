@@ -2,7 +2,7 @@
 -- +goose StatementBegin
 CREATE TABLE embeddings (
   media_id   BIGINT PRIMARY KEY REFERENCES media(id) ON DELETE CASCADE,
-  user_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id BIGINT NOT NULL, 
   model      TEXT   NOT NULL,              -- e.g. "open_clip:ViT-L/14@336px"
   vec_bytes  BYTEA  NOT NULL,              -- raw float32[] vector data
   status     TEXT   NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','in_index','failed')),
