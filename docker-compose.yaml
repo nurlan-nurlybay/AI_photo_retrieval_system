@@ -22,29 +22,6 @@ services:
     networks:
       - clip-net
 
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.worker
-    container_name: backend-worker
-    command: ["./photo-worker", "--config=/config/docker.yaml"]
-    depends_on:
-      - redis
-      - postgres
-      - seaweedfs
-      - ml_service
-      - vector_service
-    networks:
-      - clip-net
-    environment:
-      - CONFIG_PATH=/config/docker.yaml
-    volumes:
-      - ./backend/config:/config
-
-
-
-
-
   postgres:
     image: postgres:15
     container_name: pg

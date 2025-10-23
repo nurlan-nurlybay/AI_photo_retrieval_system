@@ -31,11 +31,11 @@ seaweedfs:
 
 clip:
   host: "ml_service"
-  port: 8003
+  port: 8005
 
 faiss:
   host: "vector_service"
-  port: 8002
+  port: 8006
 
 log:
   level: "info" # "info", "debug", "warn", "error"
