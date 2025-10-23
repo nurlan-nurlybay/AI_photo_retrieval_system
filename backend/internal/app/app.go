@@ -44,7 +44,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	dbClient := InitDB(ctx, cfg.Postgres.DSN())
 	mediaRepo := postgresadapter.NewMediaRepo(dbClient)
 	embeddingsRepo := postgresadapter.NewEmbeddingsRepo(dbClient)
-	log.Info("connected to postgres")
+	log.Info("connected to Postgres", "DSN", cfg.Postgres.DSN())
 
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
@@ -60,23 +60,25 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	if err != nil {
 		log.Fatal("failed to conn clip:", err)
 	}
+	log.Info("connected to CLIP client", cfg.Clip.Host, cfg.Clip.Port)
 
 	faissClient, err := faissadapter.NewClient(ctx, cfg.Faiss, httpClient)
 	if err != nil {
 		log.Fatal("failed to conn faiss:", err)
 	}
+	log.Info("connected to FAISS client", cfg.Faiss.Host, cfg.Faiss.Port)
 
 	redisClient, err := redisadapter.NewClient(ctx, cfg)
 	if err != nil {
 		log.Fatal("failed to conn redis:", err)
 	}
-	log.Info("connected to clip, faiss, redis client")
+	log.Info("connected to Redis client", "addr", cfg.Redis.Addr)
 
 	store, err := seaweedfs.NewSeaweedfs(ctx, cfg.Seaweedfs.BaseURL, httpClient)
 	if err != nil {
 		log.Fatal("failed to conn seaweedfs:", err)
 	}
-	log.Info("connected to seaweedfs client")
+	log.Info("connected to Seaweedfs client")
 
 	// Image processing libs
 	// TODO: cfg for vips and exif
