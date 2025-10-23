@@ -6,6 +6,12 @@ Start postgres in docker and use goose migration
 goose -dir ./backend/migrations postgres "postgres://postgres:postgres@localhost:5432/media?sslmode=disable" up
 ```
 
+## To access pg in docker
+Notes: \dt, \d media, use "\x on" for readable sql query result
+```bash
+docker exec -it pg psql -U postgres -d media
+```
+
 ## Init DB
 Prereq: ensure that u have postgres running and create ur actuall db 
 install goose: 

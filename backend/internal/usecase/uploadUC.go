@@ -15,14 +15,14 @@ import (
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/utils"
 )
 
-type MediaService interface {
-	UploadBatch(ctx context.Context, items []ucdto.UploadInput) ([]ucdto.UploadResult, error)
-	Delete(ctx context.Context, userID, id int64) error
-	GetByID(ctx context.Context, userID, id int64) (*domain.Media, error)
-	List(ctx context.Context, f domain.MediaFilter, p domain.Page, s domain.Sort) ([]*domain.Media, int, error)
-}
-
 type (
+	MediaService interface {
+		UploadBatch(ctx context.Context, items []ucdto.UploadInput) ([]ucdto.UploadResult, error)
+		Delete(ctx context.Context, userID, id int64) error
+		GetByID(ctx context.Context, userID, id int64) (*domain.Media, error)
+		List(ctx context.Context, f domain.MediaFilter, p domain.Page, s domain.Sort) ([]*domain.Media, int, error)
+	}
+
 	ObjectStorage interface {
 		Put(ctx context.Context, key string, r *bytes.Reader) (publicURL string, err error)
 		Delete(ctx context.Context, key string) error
@@ -146,7 +146,7 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 
 		// Store thumb
 		keyThumb := fmt.Sprintf("media/%d/%s/thumb.jpg", it.UserID, check) // hardcoded by vips bimg.JPEG
-		thumbURL, err := s.store.Put(ctx, keyThumb, bytes.NewReader(thumb)) 
+		thumbURL, err := s.store.Put(ctx, keyThumb, bytes.NewReader(thumb))
 		if err != nil {
 			s.log.ErrorContext(ctx, "failed to store thumbnail", "index", i, "key", keyThumb, "error", err)
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
