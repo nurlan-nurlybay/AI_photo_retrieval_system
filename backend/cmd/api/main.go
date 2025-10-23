@@ -36,7 +36,7 @@ func main() {
 		log.Fatal("failed to create app", "error", err)
 	}
 
-	if err := application.Run(); err != nil {
+	if err := application.Run(ctx); err != nil {
 		log.Fatal("failed to run app", "error", err)
 	}
 }

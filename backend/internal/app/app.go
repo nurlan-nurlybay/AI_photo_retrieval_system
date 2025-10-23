@@ -17,6 +17,8 @@ import (
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/metadata"
 	postgresadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/postgres"
 	redisadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/redis"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/worker"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/seaweedfs"
 
@@ -30,6 +32,9 @@ type App struct {
 	MediaSvc  usecase.MediaService
 	SearchSvc usecase.SearchService
 
+	EmbedWorker *worker.EmbedWorker
+	RetryWorker *worker.RetryWorker
+
 	server *http.Server
 	// Tracer trace.TracerProvider
 }
@@ -37,7 +42,8 @@ type App struct {
 func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, error) {
 	// Conn to DB
 	dbClient := InitDB(ctx, cfg.Postgres.DSN())
-	pgRepo := postgresadapter.NewMediaRepo(dbClient)
+	mediaRepo := postgresadapter.NewMediaRepo(dbClient)
+	embeddingsRepo := postgresadapter.NewEmbeddingsRepo(dbClient)
 	log.Info("connected to postgres")
 
 	httpClient := &http.Client{
@@ -78,8 +84,28 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	metaExt := metadata.NewExifExtractor()
 
 	// Setup app services
-	searchSvc := usecase.NewSearchService(pgRepo, clipClient, faissClient, log)
-	mediaSvc := usecase.NewMediaService(pgRepo, store, redisClient, imgProc, metaExt, log)
+	searchSvc := usecase.NewSearchService(mediaRepo, clipClient, faissClient, log)
+	mediaSvc := usecase.NewMediaService(mediaRepo, store, redisClient, imgProc, metaExt, log)
+
+	// Setup workers
+	ew := &worker.EmbedWorker{
+		Q:              redisClient,
+		EmbeddingsRepo: embeddingsRepo,
+		MediaRepo:      mediaRepo,
+		Storage:        store,
+		Clip:           clipClient,
+		Faiss:          faissClient,
+		ModelID:        "open_clip:ViT-L/14@336px",
+		QueueKey:       "jobs:embed",
+		IdleDelay:      2 * time.Second,
+		Log:            log,
+	}
+	rw := &worker.RetryWorker{
+		EmbeddingsRepo: embeddingsRepo,
+		Faiss:          faissClient,
+		Interval:       30 * time.Second, Batch: 500,
+		AlreadyExistsSubstrings: []string{"already exists", "duplicate id"},
+	}
 
 	// Wire handlers
 	router := httpadapter.SetupRoutes(searchSvc, mediaSvc, log)
@@ -90,34 +116,60 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	}
 
 	return &App{
-		Logger:    log,
-		SearchSvc: searchSvc,
-		MediaSvc:  mediaSvc,
-		server:    srv,
+		Logger:      log,
+		SearchSvc:   searchSvc,
+		MediaSvc:    mediaSvc,
+		EmbedWorker: ew,
+		RetryWorker: rw,
+		server:      srv,
 	}, nil
 }
 
-func (a *App) Run() error {
-	errCh := make(chan error, 1)
-	go func() {
+func (a *App) Run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	// HTTP server
+	g.Go(func() error {
 		a.Logger.Info("starting HTTP server", "addr", a.server.Addr)
 		if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			errCh <- fmt.Errorf("listen and serve: %w", err)
+			return fmt.Errorf("listen and serve: %w", err)
+		}
+		return nil
+	})
+
+	// EmbedWorker
+	g.Go(func() error {
+		a.Logger.Info("starting EmbedWorker")
+		return a.EmbedWorker.Run(ctx)
+	})
+
+	// RetryWorker
+	g.Go(func() error {
+		a.Logger.Info("starting RetryWorker")
+		return a.RetryWorker.Run(ctx)
+	})
+
+	// Wait for shutdown signal in separate goroutine
+	shutdownCh := make(chan os.Signal, 1)
+	signal.Notify(shutdownCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(shutdownCh)
+
+	go func() {
+		<-shutdownCh
+		cancel() // cancel all workers
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelShutdown()
+		if err := a.server.Shutdown(shutdownCtx); err != nil {
+			a.Logger.Error("server shutdown error", "error", err)
 		}
 	}()
 
-	shutdownCh := make(chan os.Signal, 1)
-	signal.Notify(shutdownCh, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case err := <-errCh:
+	// Wait for all goroutines or first error
+	if err := g.Wait(); err != nil {
 		return err
-	case sig := <-shutdownCh:
-		a.Logger.Info("shutting down server", "signal", sig)
-		if err := a.server.Close(); err != nil {
-			a.Logger.Error("server shutdown error", "error", err)
-			return fmt.Errorf("server shutdown: %w", err)
-		}
 	}
 
 	return nil
