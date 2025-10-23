@@ -16,6 +16,7 @@ const (
 	EmbTableName = "embeddings"
 
 	EmbMediaIDCol  = "media_id"
+	EmbUserIDCol   = "user_id"
 	EmbModelCol    = "model"
 	EmbVecBytesCol = "vec_bytes"
 	EmbStatusCol   = "status"
@@ -36,11 +37,11 @@ func (r *EmbeddingsRepo) Create(ctx context.Context, emb *domain.Embedding) erro
 	query, args, err := squirrel.
 		Insert(EmbTableName).
 		Columns(
-			EmbMediaIDCol, EmbModelCol, EmbVecBytesCol,
+			EmbMediaIDCol, EmbUserIDCol, EmbModelCol, EmbVecBytesCol,
 			EmbStatusCol, EmbLastErrCol, EmbCreatedCol, EmbUpdatedCol,
 		).
 		Values(
-			emb.MediaID, emb.Model, emb.VecBytes,
+			emb.MediaID, emb.UserID, emb.Model, emb.VecBytes,
 			emb.Status, emb.LastError, emb.CreatedAt, emb.UpdatedAt,
 		).
 		PlaceholderFormat(squirrel.Dollar).
@@ -61,14 +62,14 @@ func (r *EmbeddingsRepo) Create(ctx context.Context, emb *domain.Embedding) erro
 	return nil
 }
 
-func (r *EmbeddingsRepo) Get(ctx context.Context, mediaID int64) (*domain.Embedding, error) {
+func (r *EmbeddingsRepo) Get(ctx context.Context, userID, mediaID int64) (*domain.Embedding, error) {
 	query, args, err := squirrel.
 		Select(
-			EmbMediaIDCol, EmbModelCol, EmbVecBytesCol,
+			EmbMediaIDCol, EmbUserIDCol, EmbModelCol, EmbVecBytesCol,
 			EmbStatusCol, EmbLastErrCol, EmbCreatedCol, EmbUpdatedCol,
 		).
 		From(EmbTableName).
-		Where(squirrel.Eq{EmbMediaIDCol: mediaID}).
+		Where(squirrel.Eq{EmbMediaIDCol: mediaID, EmbUserIDCol: userID}).
 		Limit(1).
 		PlaceholderFormat(squirrel.Dollar).
 		ToSql()
@@ -85,7 +86,7 @@ func (r *EmbeddingsRepo) Get(ctx context.Context, mediaID int64) (*domain.Embedd
 
 	var emb domain.Embedding
 	err = row.Scan(
-		&emb.MediaID, &emb.Model, &emb.VecBytes,
+		&emb.MediaID, &emb.UserID, &emb.Model, &emb.VecBytes,
 		&emb.Status, &emb.LastError, &emb.CreatedAt, &emb.UpdatedAt,
 	)
 	if err != nil {
@@ -98,10 +99,10 @@ func (r *EmbeddingsRepo) Get(ctx context.Context, mediaID int64) (*domain.Embedd
 	return &emb, nil
 }
 
-func (r *EmbeddingsRepo) Delete(ctx context.Context, mediaID int64) error {
+func (r *EmbeddingsRepo) Delete(ctx context.Context, userID, mediaID int64) error {
 	query, args, err := squirrel.
 		Delete(EmbTableName).
-		Where(squirrel.Eq{EmbMediaIDCol: mediaID}).
+		Where(squirrel.Eq{EmbMediaIDCol: mediaID, EmbUserIDCol: userID}).
 		PlaceholderFormat(squirrel.Dollar).
 		ToSql()
 	if err != nil {
@@ -122,25 +123,25 @@ func (r *EmbeddingsRepo) Delete(ctx context.Context, mediaID int64) error {
 	return nil
 }
 
-func (r *EmbeddingsRepo) MarkPending(ctx context.Context, mediaID int64) error {
-	return r.updateStatus(ctx, mediaID, "pending", "")
+func (r *EmbeddingsRepo) MarkPending(ctx context.Context, userID, mediaID int64) error {
+	return r.updateStatus(ctx, userID, mediaID, "pending", "")
 }
 
-func (r *EmbeddingsRepo) MarkInIndex(ctx context.Context, mediaID int64) error {
-	return r.updateStatus(ctx, mediaID, "in_index", "")
+func (r *EmbeddingsRepo) MarkInIndex(ctx context.Context, userID, mediaID int64) error {
+	return r.updateStatus(ctx, userID, mediaID, "in_index", "")
 }
 
-func (r *EmbeddingsRepo) MarkFailed(ctx context.Context, mediaID int64, msg string) error {
-	return r.updateStatus(ctx, mediaID, "failed", msg)
+func (r *EmbeddingsRepo) MarkFailed(ctx context.Context, userID, mediaID int64, msg string) error {
+	return r.updateStatus(ctx, userID, mediaID, "failed", msg)
 }
 
-func (r *EmbeddingsRepo) updateStatus(ctx context.Context, mediaID int64, status, msg string) error {
+func (r *EmbeddingsRepo) updateStatus(ctx context.Context, userID, mediaID int64, status, msg string) error {
 	query, args, err := squirrel.
 		Update(EmbTableName).
 		Set(EmbStatusCol, status).
 		Set(EmbLastErrCol, msg).
 		Set(EmbUpdatedCol, time.Now().UTC()).
-		Where(squirrel.Eq{EmbMediaIDCol: mediaID}).
+		Where(squirrel.Eq{EmbMediaIDCol: mediaID, EmbUserIDCol: userID}).
 		PlaceholderFormat(squirrel.Dollar).
 		ToSql()
 	if err != nil {

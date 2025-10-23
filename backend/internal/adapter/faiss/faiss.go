@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
@@ -36,13 +37,15 @@ func NewClient(ctx context.Context, cfg config.Faiss, httpClient *http.Client) (
 	return client, nil
 }
 
-func (c *Client) Insert(ctx context.Context, id int64, vector []float32) error {
+func (c *Client) Insert(ctx context.Context, userID, mediaID int64, vector []float32) error {
 	if len(vector) == 0 {
-		return fmt.Errorf("cannot insert empty vector for media_id=%d", id)
+		return fmt.Errorf("cannot insert empty vector for media_id=%d", mediaID)
 	}
+	namespace := strconv.FormatInt(userID, 10)
 
 	req := faissdto.VectorAddRequest{
-		ID:        id,
+		Namespace: namespace,
+		ID:        mediaID,
 		Vector:    vector,
 		Normalize: true,
 	}
@@ -78,7 +81,7 @@ func (c *Client) Insert(ctx context.Context, id int64, vector []float32) error {
 	}
 
 	// Safe error dereference
-	if !out.Ok {
+	if !out.OK {
 		if out.Error != nil {
 			return fmt.Errorf("faiss error: %s", *out.Error)
 		}
@@ -122,7 +125,7 @@ func (c *Client) Search(ctx context.Context, vector []float32, k int) ([]usecase
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, fmt.Errorf("decode search response: %w", err)
 	}
-	if !out.Ok {
+	if !out.OK {
 		return nil, fmt.Errorf("faiss search failed: %v", out.Error)
 	}
 
@@ -158,7 +161,7 @@ func (c *Client) Delete(ctx context.Context, id int64) error {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return fmt.Errorf("decode delete response: %w", err)
 	}
-	if !out.Ok {
+	if !out.OK {
 		return fmt.Errorf("faiss delete failed: %v", out.Error)
 	}
 

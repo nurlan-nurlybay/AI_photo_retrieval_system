@@ -183,7 +183,7 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 		}
 
 		//  enqueue embedding job
-		job := ucdto.EmbedJob{MediaID: m.ID, Modality: "image"}
+		job := ucdto.EmbedJob{UserID: m.UserID, MediaID: m.ID, Modality: "image"}
 		b, _ := json.Marshal(job)
 		if err := s.queue.Enqueue(ctx, "jobs:embed", b); err != nil {
 			s.log.ErrorContext(ctx, "failed to enqueue job", "media_id", m.ID, "error", err)

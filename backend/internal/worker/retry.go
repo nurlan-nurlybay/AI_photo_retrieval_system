@@ -40,6 +40,7 @@ func (w *RetryWorker) Run(ctx context.Context) error {
 }
 
 func (w *RetryWorker) step(ctx context.Context) {
+	// TODO userID
 	ids, err := w.Repo.ListUnindexed(ctx, w.Batch)
 	if err != nil || len(ids) == 0 {
 		return
@@ -52,7 +53,7 @@ func (w *RetryWorker) step(ctx context.Context) {
 		}
 		vec := bytesToF64LE(vb)
 
-		if err := w.Faiss.Insert(ctx, id, vec); err != nil {
+		if err := w.Faiss.Insert(ctx, 404, id, vec); err != nil {
 			if isAlreadyExists(err, w.AlreadyExistsSubstrings) {
 				_ = w.Repo.MarkInIndex(ctx, id)
 				continue
