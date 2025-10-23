@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/app"
@@ -15,8 +16,12 @@ import (
 )
 
 func main() {
-	// cfg, err := config.Load("config.yaml")
-	cfg, err := config.Load("./config/dev.yaml")
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		configPath = "./config/dev.yaml" // default fallback
+	}
+
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		panic(err)
 	}

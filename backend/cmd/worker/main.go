@@ -20,7 +20,12 @@ import (
 )
 
 func main() {
-	cfg, err := config.Load("./config/dev.yaml")
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		configPath = "./config/dev.yaml" // default fallback
+	}
+
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		panic(err)
 	}
