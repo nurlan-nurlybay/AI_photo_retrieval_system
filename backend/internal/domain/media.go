@@ -59,3 +59,8 @@ type Embedder interface {
 type VectorIndex interface {
 	Search(deviceID string, embedding []float32, k int) ([]string, error)
 }
+
+type MediaWithScore struct {
+	Media *Media
+	Score float32
+}
