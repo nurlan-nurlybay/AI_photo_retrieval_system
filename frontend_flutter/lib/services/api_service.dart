@@ -9,7 +9,7 @@ class ApiService {
   // For Linux desktop: use localhost
   // For real device: use your computer's IP address
   static const String baseUrl = 'http://localhost:8080';
-  
+
   // For testing on real device, uncomment and replace with your IP:
   // static const String baseUrl = 'http://192.168.1.100:8080';
 
@@ -41,12 +41,13 @@ class ApiService {
     try {
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
-      
+
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
         return UploadResponse.fromJson(jsonData);
       } else {
-        throw Exception('Upload failed: ${response.statusCode} - ${response.body}');
+        throw Exception(
+            'Upload failed: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       throw Exception('Upload error: $e');
@@ -54,7 +55,10 @@ class ApiService {
   }
 
   /// Search for images using text query
-  static Future<List<SearchResult>> searchText(String query, {double similarityThreshold = 0.2}) async {
+  static Future<List<SearchResult>> searchText(
+    String query, {
+    required int userId,
+  }) async {
     if (query.trim().isEmpty) {
       throw Exception('Search query cannot be empty');
     }
@@ -62,45 +66,42 @@ class ApiService {
     final uri = Uri.parse('$baseUrl/api/search/text');
     final response = await http.post(
       uri,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'user_id': userId,
         'q': query.trim(),
-        'similarity_threshold': similarityThreshold,
       }),
     );
 
-    if (response.statusCode == 200) {
-      final jsonData = jsonDecode(response.body);
-      final searchResponse = SearchResponse.fromJson(jsonData);
-      return searchResponse.data;
-    } else {
-      throw Exception('Search failed: ${response.statusCode} - ${response.body}');
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Search failed: ${response.statusCode} - ${response.body}');
     }
+
+    final jsonData = jsonDecode(response.body);
+    final searchResponse = SearchResponse.fromJson(jsonData);
+    return searchResponse.data;
   }
 
   /// Search for images using an uploaded image
-  static Future<List<SearchResult>> searchByImage(File image, {double similarityThreshold = 0.2}) async {
+  static Future<List<SearchResult>> searchByImage(
+    File image, {
+    required int userId,
+  }) async {
     if (!await image.exists()) {
       throw Exception('Image file does not exist');
     }
 
-    final uri = Uri.parse('$baseUrl/api/search/image').replace(
-      queryParameters: {
-        'similarity_threshold': similarityThreshold.toString(),
-      },
-    );
+    final uri = Uri.parse('$baseUrl/api/search/image');
 
     final request = http.MultipartRequest('POST', uri);
-    
+
     // Add user_id as form field (required by backend)
     request.fields['user_id'] = userId.toString();
-    
-    // Add the image file
+
+    // Add the image file with correct key name: 'image'
     final multipartFile = await http.MultipartFile.fromPath(
-      'file',
+      'image', // must match `form:"image"` in Go struct
       image.path,
     );
     request.files.add(multipartFile);
@@ -108,14 +109,15 @@ class ApiService {
     try {
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
-      
-      if (response.statusCode == 200) {
-        final jsonData = jsonDecode(response.body);
-        final searchResponse = SearchResponse.fromJson(jsonData);
-        return searchResponse.data;
-      } else {
-        throw Exception('Image search failed: ${response.statusCode} - ${response.body}');
+
+      if (response.statusCode != 200) {
+        throw Exception(
+            'Image search failed: ${response.statusCode} - ${response.body}');
       }
+
+      final jsonData = jsonDecode(response.body);
+      final searchResponse = SearchResponse.fromJson(jsonData);
+      return searchResponse.data;
     } catch (e) {
       throw Exception('Image search error: $e');
     }
@@ -126,8 +128,8 @@ class ApiService {
     try {
       final uri = Uri.parse('$baseUrl/healthz');
       final response = await http.get(uri).timeout(
-        const Duration(seconds: 5),
-      );
+            const Duration(seconds: 5),
+          );
       return response.statusCode == 200;
     } catch (e) {
       return false;
