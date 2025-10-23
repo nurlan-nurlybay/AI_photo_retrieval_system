@@ -66,7 +66,7 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 		return
 	}
 
-	// Map DTO -> usecase inputs
+	// Map http to usecase inputs
 	inputs := make([]ucdto.UploadInput, 0, len(req.Files))
 	for _, fh := range req.Files {
 		// read into memory
@@ -99,7 +99,7 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 		return
 	}
 
-	// Map usecase -> DTO response
+	// Map usecase to http response
 	resp := httpdto.UploadResponse{
 		Results: make([]httpdto.UploadResult, 0, len(results)),
 	}
@@ -120,6 +120,9 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 			}
 			if !item.CreatedAt.IsZero() {
 				ui.CreatedAt = item.CreatedAt.UTC().Format(time.RFC3339)
+			}
+			if item.Metadata.DateTimeOriginal != nil {
+				ui.TakenAt = item.Metadata.DateTimeOriginal.UTC().Format(time.RFC3339)
 			}
 		}
 

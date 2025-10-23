@@ -9,6 +9,7 @@ import (
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
 	ucdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase/dto"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/utils"
 )
 
 type Queue interface {
@@ -118,14 +119,14 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob) error 
 	}
 
 	// Load bytes from storage
-	key, err := domain.ExtractS3Key(media.URL)
+	key, err := utils.ExtractS3Key(media.URL)
 	if err != nil {
 		return err
 	}
 	bytes, err := w.Storage.Get(ctx, key)
 	if err != nil || len(bytes) == 0 {
 		w.Log.ErrorContext(ctx, "failed to load media bytes", "media_id", job.MediaID, "error", err)
-		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, domain.TruncateErr(err))
+		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
 		return err
 	}
 
@@ -133,12 +134,12 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob) error 
 	vec32, err := w.Clip.EmbedImage(ctx, bytes)
 	if err != nil {
 		w.Log.ErrorContext(ctx, "embedding failed", "media_id", job.MediaID, "error", err)
-		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, domain.TruncateErr(err))
+		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
 		return err
 	}
 
 	// Serialize vector to bytes
-	bytesVec := domain.Float32ToBytes(vec32)
+	bytesVec := utils.Float32ToBytes(vec32)
 	emb := &domain.Embedding{
 		MediaID:   job.MediaID,
 		UserID:    job.UserID,
@@ -151,7 +152,7 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob) error 
 	// Upsert embedding
 	if err := w.EmbeddingsRepo.UpsertEmbedding(ctx, emb); err != nil {
 		w.Log.ErrorContext(ctx, "failed to upsert embedding", "media_id", job.MediaID, "error", err)
-		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, domain.TruncateErr(err))
+		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
 		return err
 	}
 
@@ -160,7 +161,7 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob) error 
 		w.Log.ErrorContext(ctx, "failed to insert into FAISS",
 			"media_id", job.MediaID, "dims", len(vec32), "error", err,
 		)
-		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, domain.TruncateErr(err))
+		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
 		return err
 	}
 

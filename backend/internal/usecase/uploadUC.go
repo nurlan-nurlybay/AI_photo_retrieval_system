@@ -15,14 +15,14 @@ import (
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/utils"
 )
 
-type (
-	MediaService interface {
-		UploadBatch(ctx context.Context, items []ucdto.UploadInput) ([]ucdto.UploadResult, error)
-		Delete(ctx context.Context, userID, mediaID int64) error
-		GetByID(ctx context.Context, userID, mediaID int64) (*domain.Media, error)
-		List(ctx context.Context, f domain.MediaFilter, p domain.Page, s domain.Sort) ([]*domain.Media, int, error)
-	}
+type MediaService interface {
+	UploadBatch(ctx context.Context, items []ucdto.UploadInput) ([]ucdto.UploadResult, error)
+	Delete(ctx context.Context, userID, mediaID int64) error
+	GetByID(ctx context.Context, userID, mediaID int64) (*domain.Media, error)
+	List(ctx context.Context, f domain.MediaFilter, p domain.Page, s domain.Sort) ([]*domain.Media, int, error)
+}
 
+type (
 	ObjectStorage interface {
 		Put(ctx context.Context, key string, r *bytes.Reader) (publicURL string, err error)
 		Delete(ctx context.Context, key string) error

@@ -7,12 +7,12 @@ import (
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
 )
 
-type (
-	SearchService interface {
-		SearchByText(ctx context.Context, userID int64, text string, k int) ([]*domain.MediaWithScore, error)
-		SearchByImage(ctx context.Context, userID int64, img []byte, k int) ([]domain.Media, error)
-	}
+type SearchService interface {
+	SearchByText(ctx context.Context, userID int64, text string, k int) ([]*domain.MediaWithScore, error)
+	SearchByImage(ctx context.Context, userID int64, img []byte, k int) ([]*domain.MediaWithScore, error)
+}
 
+type (
 	Embedder interface {
 		EmbedText(ctx context.Context, text string) ([]float32, error)
 		EmbedImage(ctx context.Context, data []byte) ([]float32, error)
@@ -31,22 +31,23 @@ type (
 )
 
 type searchService struct {
+	mediaRepo   domain.MediaRepository
 	embedder    Embedder
 	vectorIndex VectorIndex
-	mediaRepo   domain.MediaRepository
 	log         *logger.Logger
 }
 
 func NewSearchService(mediaRepo domain.MediaRepository, embedder Embedder, vectorIndex VectorIndex, log *logger.Logger) SearchService {
 	return &searchService{
+		mediaRepo:   mediaRepo,
 		embedder:    embedder,
 		vectorIndex: vectorIndex,
-		mediaRepo:   mediaRepo,
 		log:         log,
 	}
 }
 
 func (s *searchService) SearchByText(ctx context.Context, userID int64, text string, k int) ([]*domain.MediaWithScore, error) {
+
 	embedding, err := s.embedder.EmbedText(ctx, text)
 	if err != nil {
 		return nil, err
@@ -75,6 +76,31 @@ func (s *searchService) SearchByText(ctx context.Context, userID int64, text str
 	return out, nil
 }
 
-func (s *searchService) SearchByImage(ctx context.Context, deviceID int64, img []byte, k int) ([]domain.Media, error) {
-	return nil, domain.ErrSearchFailed
+func (s *searchService) SearchByImage(ctx context.Context, userID int64, img []byte, k int) ([]*domain.MediaWithScore, error) {
+	embedding, err := s.embedder.EmbedImage(ctx, img)
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := s.vectorIndex.Search(ctx, userID, embedding, k)
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch media info and attach score
+	var out []*domain.MediaWithScore
+	for _, r := range results {
+		media, err := s.mediaRepo.Get(ctx, userID, r.ID)
+		if err != nil {
+			continue 
+		}
+		out = append(out, &domain.MediaWithScore{
+			Media: media,
+			Score: r.Score,
+		})
+	}
+
+	// s.log.DebugContext(ctx, "search results FAISS", "res:", results)
+
+	return out, nil
 }

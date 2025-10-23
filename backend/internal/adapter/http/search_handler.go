@@ -30,13 +30,13 @@ func (h *SearchHandler) SearchByText(c *gin.Context) {
 		return
 	}
 
-	media, err := h.searchUC.SearchByText(c.Request.Context(), req.UserID, req.Query, 10)
+	mediaWithScore, err := h.searchUC.SearchByText(c.Request.Context(), req.UserID, req.Query, 10)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(200, gin.H{"data": media})
+	c.JSON(200, gin.H{"data": mediaWithScore})
 }
 
 func (h *SearchHandler) SearchByImage(c *gin.Context) {
@@ -67,21 +67,19 @@ func (h *SearchHandler) SearchByImage(c *gin.Context) {
 		}
 	}
 
-	media, err := h.searchUC.SearchByImage(c.Request.Context(), req.UserID, imgBytes, 10)
+	mediaWithScore, err := h.searchUC.SearchByImage(c.Request.Context(), req.UserID, imgBytes, 10)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, media)
+	c.JSON(http.StatusOK, mediaWithScore)
 }
 
 func (h *SearchHandler) handleError(c *gin.Context, err error) {
 	switch err {
 	case domain.ErrMediaNotFound:
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-	case domain.ErrInvalidDevice, domain.ErrInvalidQuery:
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 	}
