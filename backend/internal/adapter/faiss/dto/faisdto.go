@@ -1,5 +1,7 @@
 package faissdto
 
+import "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
+
 // ---------- Add ----------
 type VectorAddRequest struct {
 	Namespace string    `json:"namespace"`
@@ -41,19 +43,14 @@ type VectorSearchRequest struct {
 	Normalize bool      `json:"normalize"`
 }
 
-type SearchResult struct {
-	ID    int64   `json:"id"`
-	Score float32 `json:"score"`
-}
-
 type VectorSearchResponse struct {
-	OK        bool           `json:"ok"`
-	Namespace string         `json:"namespace"`
-	K         int            `json:"k"`
-	Results   []SearchResult `json:"results"`
-	Degraded  bool           `json:"degraded"`
-	TookMs    *int           `json:"tookMs,omitempty"`
-	Error     *string        `json:"error,omitempty"`
+	OK        bool                   `json:"ok"`
+	Namespace string                 `json:"namespace"`
+	K         int                    `json:"k"`
+	Results   []usecase.SearchResult `json:"results"`
+	Degraded  bool                   `json:"degraded"`
+	TookMs    *int                   `json:"tookMs,omitempty"`
+	Error     *string                `json:"error,omitempty"`
 }
 
 // ---------- Health ----------

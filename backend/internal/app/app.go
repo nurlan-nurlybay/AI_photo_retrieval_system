@@ -78,7 +78,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	metaExt := metadata.NewExifExtractor()
 
 	// Setup app services
-	searchSvc := usecase.NewSearchService(pgRepo, clipClient, faissClient)
+	searchSvc := usecase.NewSearchService(pgRepo, clipClient, faissClient, log)
 	mediaSvc := usecase.NewMediaService(pgRepo, store, redisClient, imgProc, metaExt, log)
 
 	// Wire handlers

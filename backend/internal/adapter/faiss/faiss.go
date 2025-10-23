@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
@@ -41,7 +40,7 @@ func (c *Client) Insert(ctx context.Context, userID, mediaID int64, vector []flo
 	if len(vector) == 0 {
 		return fmt.Errorf("cannot insert empty vector for media_id=%d", mediaID)
 	}
-	namespace := strconv.FormatInt(userID, 10)
+	namespace := fmt.Sprintf("u%d", userID)
 
 	req := faissdto.VectorAddRequest{
 		Namespace: namespace,
@@ -96,44 +95,47 @@ func (c *Client) Insert(ctx context.Context, userID, mediaID int64, vector []flo
 	return nil
 }
 
-func (c *Client) Search(ctx context.Context, vector []float32, k int) ([]usecase.SearchResult, error) {
-	req := faissdto.VectorSearchRequest{
+func (c *Client) Search(ctx context.Context, userID int64, vector []float32, k int) ([]usecase.SearchResult, error) {
+	namespace := fmt.Sprintf("u%d", userID)
+
+	reqBody := faissdto.VectorSearchRequest{
+		Namespace: &namespace,
 		Vector:    vector,
 		K:         k,
 		Normalize: true,
 	}
 
-	body, err := json.Marshal(req)
+	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal search request: %w", err)
 	}
 
-	url := c.baseURL + "/v1/vectors/search"
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(body))
+	url := fmt.Sprintf("%s/v1/vectors/search", c.baseURL)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("build search request: %w", err)
+		return nil, fmt.Errorf("create search request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("send search request: %w", err)
+		return nil, fmt.Errorf("search request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	var out faissdto.VectorSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	var sr faissdto.VectorSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
 		return nil, fmt.Errorf("decode search response: %w", err)
 	}
-	if !out.OK {
-		return nil, fmt.Errorf("faiss search failed: %v", out.Error)
+
+	if !sr.OK {
+		if sr.Error != nil {
+			return nil, fmt.Errorf("vector search failed: %s", *sr.Error)
+		}
+		return nil, fmt.Errorf("vector search failed with unknown error")
 	}
 
-	results := make([]usecase.SearchResult, len(out.Results))
-	for i, r := range out.Results {
-		results[i] = usecase.SearchResult{ID: r.ID, Score: r.Score}
-	}
-	return results, nil
+	return sr.Results, nil
 }
 
 func (c *Client) Delete(ctx context.Context, id int64) error {
