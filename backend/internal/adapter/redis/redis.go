@@ -41,7 +41,7 @@ func (c *Client) Enqueue(ctx context.Context, key string, payload []byte) error 
 }
 
 func (c *Client) DequeueBlock(ctx context.Context, key string, timeoutSeconds int) (string, []byte, error) {
-	// BRPOP returns list,key and value; we just care about value
+	// BRPOP returns list [key, value]
 	res, err := c.rdb.BRPop(ctx, time.Duration(timeoutSeconds)*time.Second, key).Result()
 	if err != nil {
 		return "", nil, err

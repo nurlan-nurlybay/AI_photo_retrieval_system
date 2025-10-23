@@ -113,6 +113,7 @@ func (r *EmbeddingsRepo) Delete(ctx context.Context, mediaID int64) error {
 		QueryRaw: query,
 	}
 
+	// TODO: check tag for RowsAffected()
 	_, err = r.db.DB().ExecContext(ctx, q, args...)
 	if err != nil {
 		return fmt.Errorf("exec emb delete: %w", err)
@@ -151,6 +152,7 @@ func (r *EmbeddingsRepo) updateStatus(ctx context.Context, mediaID int64, status
 		QueryRaw: query,
 	}
 
+	// TODO: check tag for RowsAffected()
 	if _, err := r.db.DB().ExecContext(ctx, q, args...); err != nil {
 		return fmt.Errorf("exec emb status update: %w", err)
 	}
