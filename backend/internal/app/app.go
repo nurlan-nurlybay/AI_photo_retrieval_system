@@ -41,6 +41,8 @@ type App struct {
 
 func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, error) {
 	// Conn to DB
+	log.Info("loading Postgres", "DSN", cfg.Postgres.DSN())
+
 	dbClient := InitDB(ctx, cfg.Postgres.DSN())
 	mediaRepo := postgresadapter.NewMediaRepo(dbClient)
 	embeddingsRepo := postgresadapter.NewEmbeddingsRepo(dbClient)
