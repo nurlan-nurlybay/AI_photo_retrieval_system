@@ -18,8 +18,8 @@ import (
 type (
 	MediaService interface {
 		UploadBatch(ctx context.Context, items []ucdto.UploadInput) ([]ucdto.UploadResult, error)
-		Delete(ctx context.Context, userID, id int64) error
-		GetByID(ctx context.Context, userID, id int64) (*domain.Media, error)
+		Delete(ctx context.Context, userID, mediaID int64) error
+		GetByID(ctx context.Context, userID, mediaID int64) (*domain.Media, error)
 		List(ctx context.Context, f domain.MediaFilter, p domain.Page, s domain.Sort) ([]*domain.Media, int, error)
 	}
 

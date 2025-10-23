@@ -88,7 +88,7 @@ func (r *MediaRepo) Create(ctx context.Context, m *domain.Media) error {
 	return nil
 }
 
-func (r *MediaRepo) Get(ctx context.Context, userID, id int64) (*domain.Media, error) {
+func (r *MediaRepo) Get(ctx context.Context, userID, mediaID int64) (*domain.Media, error) {
 	query, args, err := squirrel.
 		Select(
 			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol, SizeBytesCol,
@@ -96,7 +96,7 @@ func (r *MediaRepo) Get(ctx context.Context, userID, id int64) (*domain.Media, e
 			MakeCol, ModelCol, SoftwareCol,
 		).
 		From(TableName).
-		Where(squirrel.Eq{IDCol: id, UserIDCol: userID}).
+		Where(squirrel.Eq{IDCol: mediaID, UserIDCol: userID}).
 		Limit(1).
 		PlaceholderFormat(squirrel.Dollar).
 		ToSql()

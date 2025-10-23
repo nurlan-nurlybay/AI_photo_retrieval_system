@@ -14,6 +14,7 @@ import (
 	postgresadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/postgres"
 	redisadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/redis"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/seaweedfs"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/app"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/worker"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
 )
@@ -31,6 +32,12 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	// Conn to DB
+	dbClient := app.InitDB(ctx, cfg.Postgres.DSN())
+	mediaRepo := postgresadapter.NewMediaRepo(dbClient)
+	embeddingsRepo := postgresadapter.NewEmbeddingsRepo(dbClient)
+	log.Info("connected to postgres")
+
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
@@ -40,41 +47,46 @@ func main() {
 		},
 	}
 
-	// Create connection pool
-	pgxpool, err := postgresadapter.InitDB(ctx, cfg)
-	if err != nil {
-		log.Fatal("failed to connect to postgres:", err)
-	}
-	log.Info("connected to postgres")
-
 	// Prep dependencies
-	store, err := seaweedfs.NewLocalFS("./var/uploads", "http://localhost:8080/uploads")
-	if err != nil {
-		log.Fatal("failed to connect to seaweedfs:", err)
-	}
-	workerRepo := postgresadapter.NewWorkRepo(pgxpool, store)
 	clipClient, err := clipadapter.NewClient(ctx, cfg.Clip, httpClient)
 	if err != nil {
 		log.Fatal("failed to conn clip:", err)
 	}
+
 	faissClient, err := faissadapter.NewClient(ctx, cfg.Faiss, httpClient)
 	if err != nil {
 		log.Fatal("failed to conn faiss:", err)
 	}
+
 	redisClient, err := redisadapter.NewClient(ctx, cfg)
 	if err != nil {
 		log.Fatal("failed to conn redis:", err)
 	}
-	log.Info("connected to redis client")
+	log.Info("connected to clip, faiss, redis client")
 
+	store, err := seaweedfs.NewSeaweedfs(ctx, cfg.Seaweedfs.BaseURL, httpClient)
+	if err != nil {
+		log.Fatal("failed to conn seaweedfs:", err)
+	}
+	log.Info("connected to seaweedfs client")
+
+	// Run workers
 	ew := &worker.EmbedWorker{
-		Q: redisClient, Repo: workerRepo, Clip: clipClient, Faiss: faissClient,
-		ModelID: "open_clip:ViT-L/14@336px", QueueKey: "jobs:embed", IdleDelay: 2 * time.Second,
-		Log: log,
+		Q:              redisClient,
+		EmbeddingsRepo: embeddingsRepo,
+		MediaRepo:      mediaRepo,
+		Storage:        store,
+		Clip:           clipClient,
+		Faiss:          faissClient,
+		ModelID:        "open_clip:ViT-L/14@336px",
+		QueueKey:       "jobs:embed",
+		IdleDelay:      2 * time.Second,
+		Log:            log,
 	}
 	rw := &worker.RetryWorker{
-		Repo: workerRepo, Faiss: faissClient,
-		Interval: 30 * time.Second, Batch: 500,
+		EmbeddingsRepo: embeddingsRepo,
+		Faiss:          faissClient,
+		Interval:       30 * time.Second, Batch: 500,
 		AlreadyExistsSubstrings: []string{"already exists", "duplicate id"},
 	}
 

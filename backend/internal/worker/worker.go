@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
 )
 
@@ -21,12 +22,18 @@ type VectorIndex interface {
 	Insert(ctx context.Context, userID, mediaID int64, vector []float32) error
 }
 
-type Repo interface {
-	// SeaweedFS fetch
-	LoadMediaBytes(ctx context.Context, userID, mediaID int64) ([]byte, error)
+type ObjectStorage interface {
+	Get(ctx context.Context, key string) ([]byte, error)
+}
 
-	// Embeddings table ops (status lives in table)
-	UpsertEmbedding(ctx context.Context, userID, mediaID int64, model string, vecBytes []byte) error
+type MediaRepo interface {
+	Get(ctx context.Context, userID, mediaID int64) (*domain.Media, error)
+}
+
+type EmbeddingsRepo interface {
+	UpsertEmbedding(ctx context.Context, emb *domain.Embedding) error
+	GetEmbedding(ctx context.Context, userID, mediaID int64) (*domain.Embedding, error)
+	DeleteEmbedding(ctx context.Context, userID, mediaID int64) error
 	MarkPending(ctx context.Context, userID, mediaID int64) error
 	MarkInIndex(ctx context.Context, userID, mediaID int64) error
 	MarkFailed(ctx context.Context, userID, mediaID int64, msg string) error
@@ -44,14 +51,16 @@ type EmbedJob struct {
 
 // consume upload jobs, embed, store, index, set status
 type EmbedWorker struct {
-	Q         Queue
-	Repo      Repo
-	Clip      Embedder
-	Faiss     VectorIndex
-	ModelID   string        // e.g. "open_clip:ViT-L/14@336px"
-	QueueKey  string        // e.g. "jobs:embed"
-	IdleDelay time.Duration // sleep after BRPOP timeouts/errors
-	Log       *logger.Logger
+	Q              Queue
+	EmbeddingsRepo EmbeddingsRepo
+	MediaRepo      MediaRepo
+	Storage        ObjectStorage
+	Clip           Embedder
+	Faiss          VectorIndex
+	ModelID        string        // e.g. "open_clip:ViT-L/14@336px"
+	QueueKey       string        // e.g. "jobs:embed"
+	IdleDelay      time.Duration // sleep after BRPOP timeouts/errors
+	Log            *logger.Logger
 }
 
 func (w *EmbedWorker) Run(ctx context.Context) error {
@@ -101,49 +110,63 @@ func (w *EmbedWorker) Run(ctx context.Context) error {
 	}
 }
 
-// mediaID
-// get image []byte from seaweedfs
-// call clip to get vector
-// upsertEmbedding
 func (w *EmbedWorker) processOne(ctx context.Context, job EmbedJob) error {
 	w.Log.DebugContext(ctx, "fetching media bytes", "media_id", job.MediaID)
-	bytes, err := w.Repo.LoadMediaBytes(ctx, job.UserID, job.MediaID)
+
+	// Fetch media
+	media, err := w.MediaRepo.Get(ctx, job.UserID, job.MediaID)
+	if err != nil {
+		return fmt.Errorf("get media: %w", err)
+	}
+	if media == nil {
+		return fmt.Errorf("media not found: user=%d, media=%d", job.UserID, job.MediaID)
+	}
+
+	// Load bytes from storage
+	bytes, err := w.Storage.Get(ctx, media.URL)
 	if err != nil || len(bytes) == 0 {
 		w.Log.ErrorContext(ctx, "failed to load media bytes", "media_id", job.MediaID, "error", err)
-		_ = w.Repo.MarkFailed(ctx, job.UserID, job.MediaID, truncateErr(err))
+		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, domain.TruncateErr(err))
 		return err
 	}
 
-	w.Log.DebugContext(ctx, "embedding image", "media_id", job.MediaID)
-	vec64, err := w.Clip.EmbedImage(ctx, bytes)
+	// Generate embedding vector
+	vec32, err := w.Clip.EmbedImage(ctx, bytes)
 	if err != nil {
 		w.Log.ErrorContext(ctx, "embedding failed", "media_id", job.MediaID, "error", err)
-		_ = w.Repo.MarkFailed(ctx, job.UserID, job.MediaID, truncateErr(err))
+		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, domain.TruncateErr(err))
 		return err
 	}
 
-	w.Log.DebugContext(ctx, "packing embedding vector", "media_id", job.MediaID, "dims", len(vec64))
-	vecBytes := f64ToLEf32(vec64)
+	// Serialize vector to bytes
+	bytesVec := domain.Float32ToBytes(vec32)
+	emb := &domain.Embedding{
+		MediaID:   job.MediaID,
+		UserID:    job.UserID,
+		Model:     job.Modality,
+		VecBytes:  bytesVec,
+		Status:    "pending",
+		LastError: "",
+	}
 
-	if err := w.Repo.UpsertEmbedding(ctx, job.UserID, job.MediaID, w.ModelID, vecBytes); err != nil {
+	// Upsert embedding
+	if err := w.EmbeddingsRepo.UpsertEmbedding(ctx, emb); err != nil {
 		w.Log.ErrorContext(ctx, "failed to upsert embedding", "media_id", job.MediaID, "error", err)
-		_ = w.Repo.MarkFailed(ctx, job.UserID, job.MediaID, truncateErr(err))
+		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, domain.TruncateErr(err))
 		return err
 	}
-	_ = w.Repo.MarkPending(ctx, job.UserID, job.MediaID)
 
-	w.Log.DebugContext(ctx, "inserting into FAISS", "media_id", job.MediaID)
-	if err := w.Faiss.Insert(ctx, job.UserID, job.MediaID, vec64); err != nil {
+	// Insert into FAISS/Milvus
+	if err := w.Faiss.Insert(ctx, job.UserID, job.MediaID, vec32); err != nil {
 		w.Log.ErrorContext(ctx, "failed to insert into FAISS",
-			"media_id", job.MediaID,
-			"dims", len(vec64),
-			"error", fmt.Sprintf("%+v", err),
+			"media_id", job.MediaID, "dims", len(vec32), "error", err,
 		)
-		_ = w.Repo.MarkFailed(ctx, job.UserID, job.MediaID, truncateErr(err))
+		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, domain.TruncateErr(err))
 		return err
 	}
 
+	// Mark as successfully indexed
+	_ = w.EmbeddingsRepo.MarkInIndex(ctx, job.UserID, job.MediaID)
 	w.Log.InfoContext(ctx, "embedding successfully indexed", "media_id", job.MediaID)
-	_ = w.Repo.MarkInIndex(ctx, job.UserID, job.MediaID)
 	return nil
 }
