@@ -78,7 +78,7 @@ func (w *EmbedWorker) Run(ctx context.Context) error {
 		// w.Log.DebugContext(ctx, "waiting for job", "queue", w.QueueKey)
 		key, payload, err := w.Q.DequeueBlock(ctx, w.QueueKey, 10)
 		if err != nil {
-			// w.Log.ErrorContext(ctx, "dequeue failed", "error", err)
+			w.Log.ErrorContext(ctx, "dequeue failed", "error", err)
 			time.Sleep(w.IdleDelay)
 			continue
 		}

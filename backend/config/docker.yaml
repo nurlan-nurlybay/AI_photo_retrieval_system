@@ -8,7 +8,7 @@ http:
   idleTimeout: "60s"
 
 postgres:
-  host: media_postgres
+  host: "postgres"
   port: 5432
   user: "postgres"
   password: "postgres"
@@ -18,7 +18,7 @@ postgres:
   connMaxLifetime: "5m"
 
 redis:
-  addr: "localhost:6379"
+  addr: "redis:6379"
   password: ""
   db: 0
   dialTimeout: 2s
@@ -27,17 +27,17 @@ redis:
   poolSize: 10
 
 seaweedfs:
-  baseURL: "http://localhost:8333"
+  baseURL: "http://seaweedfs:8333"  
 
 clip:
-  host: "clip-service"
-  port: 8001
+  host: "ml_service"
+  port: 8003
 
 faiss:
-  host: "faiss-service"
+  host: "vector_service"
   port: 8002
 
 log:
-  level: "debug" # "info", "debug", "warn", "error"
+  level: "info" # "info", "debug", "warn", "error"
   format: "json" # "json", "text"
   sourceFolder: "backend"
