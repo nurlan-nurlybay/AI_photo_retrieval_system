@@ -4,317 +4,324 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/db"
 )
 
-type MediaPG struct {
-	db               *pgxpool.Pool
-	table            string
+const (
+	TableName = "media"
+
+	IDCol        = "id"
+	UserIDCol    = "user_id"
+	URLCol       = "url"
+	ThumbURLCol  = "thumb_url"
+	MimeTypeCol  = "mime_type"
+	SizeBytesCol = "size_bytes"
+	ChecksumCol  = "checksum"
+	TakenAtCol   = "datetime_original"
+	WidthCol     = "width"
+	HeightCol    = "height"
+	MakeCol      = "camera_make"
+	ModelCol     = "camera_model"
+	SoftwareCol  = "software"
+	OrientCol    = "orientation"
+	CreatedAtCol = "created_at"
+)
+
+var _ domain.MediaRepository = (*MediaRepo)(nil)
+
+type MediaRepo struct {
+	db               db.Client
 	uniqUserChecksum string // name of UNIQUE(user_id, checksum) constraint for error mapping
+
 }
 
-func NewMediaPG(db *pgxpool.Pool) *MediaPG {
-	return &MediaPG{
+func NewMediaRepo(db db.Client) *MediaRepo {
+	return &MediaRepo{
 		db:               db,
-		table:            "media",
-		uniqUserChecksum: "media_user_checksum_uniq",
+		uniqUserChecksum: "media_user_checksum_uniq", // as defined in migration file
 	}
 }
 
-var _ domain.MediaRepository = (*MediaPG)(nil)
-
-func (r *MediaPG) Create(ctx context.Context, m *domain.Media) error {
-	tx, err := r.db.Begin(ctx)
+func (r *MediaRepo) Create(ctx context.Context, m *domain.Media) error {
+	query, args, err := squirrel.
+		Insert(TableName).
+		Columns(
+			UserIDCol, URLCol, ThumbURLCol, MimeTypeCol, SizeBytesCol,
+			ChecksumCol, CreatedAtCol, TakenAtCol, WidthCol, HeightCol,
+			MakeCol, ModelCol, SoftwareCol, OrientCol,
+		).
+		Values(
+			m.UserID, m.URL, m.ThumbURL, m.MimeType, m.SizeBytes,
+			m.Checksum, m.CreatedAt, m.Metadata.DateTimeOriginal,
+			m.Metadata.Width, m.Metadata.Height,
+			m.Metadata.CameraMake, m.Metadata.CameraModel,
+			m.Metadata.Software, m.Metadata.Orientation,
+		).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
 	if err != nil {
-		return err
+		return fmt.Errorf("build media insert: %w", err)
 	}
-	defer tx.Rollback(ctx)
 
-	// Insert media and capture the generated ID
-	const mediaQ = `
-		INSERT INTO media (
-			user_id, url, thumb_url, mime_type, size_bytes, checksum, created_at
-		)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
-		RETURNING id
-	`
-	err = tx.QueryRow(ctx, mediaQ,
-		m.UserID, m.URL, m.ThumbURL, m.MimeType,
-		m.SizeBytes, m.Checksum, m.CreatedAt,
-	).Scan(&m.ID)
+	q := db.Query{
+		Name:     "MediaRepo.Create",
+		QueryRaw: query,
+	}
+
+	_, err = r.db.DB().ExecContext(ctx, q, args...)
 	if err != nil {
-		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.ConstraintName == r.uniqUserChecksum {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.ConstraintName == r.uniqUserChecksum {
 			return &domain.DomainError{
 				Code: domain.ErrMediaAlreadyExists.Code,
 				Msg:  domain.ErrMediaAlreadyExists.Msg,
 			}
 		}
-		return err
-	}
-
-	// Only insert metadata if it exists
-	if m.Metadata.Width != 0 || m.Metadata.Height != 0 ||
-		m.Metadata.CameraMake != "" || m.Metadata.CameraModel != "" || m.Metadata.Software != "" ||
-		m.Metadata.DateTimeOriginal != nil {
-
-		const metaQ = `
-			INSERT INTO media_metadata (
-				media_id, datetime_original, orientation, width, height, file_format,
-				camera_make, camera_model, software
-			)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-		`
-		_, err = tx.Exec(ctx, metaQ,
-			m.ID, m.Metadata.DateTimeOriginal, m.Metadata.Orientation, m.Metadata.Width,
-			m.Metadata.Height, m.Metadata.CameraMake,
-			m.Metadata.CameraModel, m.Metadata.Software,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
-	return tx.Commit(ctx)
-}
-
-func (r *MediaPG) Delete(ctx context.Context, userID, id int64) error {
-	const q = `
-		DELETE FROM media
-		WHERE id = $1 AND user_id = $2
-	`
-
-	cmd, err := r.db.Exec(ctx, q, id, userID)
-	if err != nil {
-		return err
-	}
-
-	if cmd.RowsAffected() == 0 {
-		return &domain.DomainError{Code: domain.ErrMediaNotFound.Code, Msg: domain.ErrMediaNotFound.Msg}
+		return fmt.Errorf("exec media insert: %w", err)
 	}
 
 	return nil
 }
 
-func (r *MediaPG) Get(ctx context.Context, userID, id int64) (*domain.Media, error) {
-	const q = `
-		SELECT 
-			m.id, m.user_id, m.url, m.thumb_url, m.mime_type, m.size_bytes, 
-			m.checksum, m.created_at,
-			md.datetime_original, md.orientation, md.width, md.height, 
-			md.camera_make, md.camera_model, md.software
-		FROM media m
-		LEFT JOIN media_metadata md ON m.id = md.media_id
-		WHERE m.id = $1 AND m.user_id = $2
-	`
+func (r *MediaRepo) Get(ctx context.Context, userID, id int64) (*domain.Media, error) {
+	query, args, err := squirrel.
+		Select(
+			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol, SizeBytesCol,
+			ChecksumCol, CreatedAtCol, TakenAtCol, OrientCol, WidthCol, HeightCol,
+			MakeCol, ModelCol, SoftwareCol,
+		).
+		From(TableName).
+		Where(squirrel.Eq{IDCol: id, UserIDCol: userID}).
+		Limit(1).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build media select: %w", err)
+	}
 
-	var media domain.Media
-	var md domain.Metadata
+	q := db.Query{
+		Name:     "MediaRepo.Get",
+		QueryRaw: query,
+	}
 
-	err := r.db.QueryRow(ctx, q, id, userID).Scan(
-		&media.ID,
-		&media.UserID,
-		&media.URL,
-		&media.ThumbURL,
-		&media.MimeType,
-		&media.SizeBytes,
-		&media.Checksum,
-		&media.CreatedAt,
-		&md.DateTimeOriginal,
-		&md.Orientation,
-		&md.Width,
-		&md.Height,
-		&md.CameraMake,
-		&md.CameraModel,
-		&md.Software,
+	row := r.db.DB().QueryRowContext(ctx, q, args...)
+
+	var m domain.Media
+	var meta domain.Metadata
+	err = row.Scan(
+		&m.ID, &m.UserID, &m.URL, &m.ThumbURL, &m.MimeType, &m.SizeBytes,
+		&m.Checksum, &m.CreatedAt, &meta.DateTimeOriginal, &meta.Orientation,
+		&meta.Width, &meta.Height, &meta.CameraMake, &meta.CameraModel, &meta.Software,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, &domain.DomainError{Code: domain.ErrMediaNotFound.Code, Msg: domain.ErrMediaNotFound.Msg}
+			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("scan media: %w", err)
 	}
 
-	media.Metadata = md
-	return &media, nil
+	m.Metadata = meta
+	return &m, nil
 }
 
-// fetches by user + checksum for exact-byte dedup.
-func (r *MediaPG) GetByChecksum(ctx context.Context, userID int64, checksum string) (*domain.Media, error) {
-	const q = `
-		SELECT 
-			m.id, m.user_id, m.url, m.thumb_url, m.mime_type, m.size_bytes, 
-			m.checksum, m.created_at,
-			md.datetime_original, md.orientation, md.width, md.height, 
-			md.camera_make, md.camera_model, md.software
-		FROM media m
-		LEFT JOIN media_metadata md ON m.id = md.media_id
-		WHERE m.user_id = $1 AND m.checksum = $2
-	`
+// fetches by user + checksum for exact-byte dedup
+func (r *MediaRepo) GetByChecksum(ctx context.Context, userID int64, checksum string) (*domain.Media, error) {
+	query, args, err := squirrel.
+		Select(
+			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol, SizeBytesCol,
+			ChecksumCol, CreatedAtCol, TakenAtCol, WidthCol, HeightCol,
+			MakeCol, ModelCol, SoftwareCol, OrientCol,
+		).
+		From(TableName).
+		Where(squirrel.Eq{UserIDCol: userID, ChecksumCol: checksum}).
+		Limit(1).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build media select: %w", err)
+	}
 
-	var media domain.Media
-	var md domain.Metadata
+	q := db.Query{
+		Name:     "MediaRepo.GetByChecksum",
+		QueryRaw: query,
+	}
 
-	err := r.db.QueryRow(ctx, q, userID, checksum).Scan(
-		&media.ID,
-		&media.UserID,
-		&media.URL,
-		&media.ThumbURL,
-		&media.MimeType,
-		&media.SizeBytes,
-		&media.Checksum,
-		&media.CreatedAt,
-		&md.DateTimeOriginal,
-		&md.Orientation,
-		&md.Width,
-		&md.Height,
-		&md.CameraMake,
-		&md.CameraModel,
-		&md.Software,
+	row := r.db.DB().QueryRowContext(ctx, q, args...)
+
+	var m domain.Media
+	var meta domain.Metadata
+	err = row.Scan(
+		&m.ID, &m.UserID, &m.URL, &m.ThumbURL, &m.MimeType, &m.SizeBytes,
+		&m.Checksum, &m.CreatedAt, &meta.DateTimeOriginal, &meta.Width,
+		&meta.Height, &meta.CameraMake, &meta.CameraModel, &meta.Software,
+		&meta.Orientation,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, &domain.DomainError{Code: domain.ErrMediaNotFound.Code, Msg: domain.ErrMediaNotFound.Msg}
+			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("scan media: %w", err)
 	}
 
-	media.Metadata = md
-	return &media, nil
+	m.Metadata = meta
+	return &m, nil
 }
 
-// returns paginated results and the total count.
-func (r *MediaPG) List(ctx context.Context, f domain.MediaFilter, p domain.Page, s domain.Sort) ([]*domain.Media, int, error) {
-	shotExpr := "COALESCE(md.datetime_original, m.created_at)"
+// returns paginated results and the total count
+func (r *MediaRepo) List(ctx context.Context, f domain.MediaFilter, p domain.Page, s domain.Sort) ([]*domain.Media, int, error) {
+	builder := squirrel.
+		Select(
+			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol,
+			SizeBytesCol, ChecksumCol, CreatedAtCol, TakenAtCol,
+			WidthCol, HeightCol, MakeCol, ModelCol, SoftwareCol, OrientCol,
+		).
+		From(TableName).
+		PlaceholderFormat(squirrel.Dollar)
 
-	// Whitelist sort fields to avoid SQL injection-by-config
-	allowedSort := map[string]string{
-		"":           "m.created_at", // default
-		"created_at": "m.created_at",
-		"id":         "m.id",
-		"size_bytes": "m.size_bytes",
-		"mime_type":  "m.mime_type",
-		"shot_at":    shotExpr,
-	}
-	sortField, ok := allowedSort[s.Field]
-	if !ok {
-		sortField = allowedSort[""]
-	}
-	orderDir := "ASC"
-	if s.Desc {
-		orderDir = "DESC"
-	}
-
-	baseQ := strings.Builder{}
-	baseQ.WriteString(`
-		SELECT 
-			m.id, m.user_id, m.url, m.thumb_url, m.mime_type, m.size_bytes, 
-			m.checksum, m.created_at,
-			md.datetime_original, md.orientation, md.width, md.height, 
-			md.camera_make, md.camera_model, md.software
-		FROM media m
-		LEFT JOIN media_metadata md ON m.id = md.media_id
-		WHERE 1=1
-	`)
-
-	countQ := strings.Builder{}
-	countQ.WriteString(`
-		SELECT COUNT(*)
-		FROM media m
-		LEFT JOIN media_metadata md ON m.id = md.media_id
-		WHERE 1=1
-	`)
-
-	var args []any
-	var countArgs []any
-	argPos := 1
-
-	addCond := func(cond string, val any) {
-		baseQ.WriteString(" AND " + cond)
-		countQ.WriteString(" AND " + cond)
-		args = append(args, val)
-		countArgs = append(countArgs, val)
-		argPos++
-	}
-
-	// Filters
-	if f.UserID != nil && *f.UserID != "" {
-		addCond(fmt.Sprintf("m.user_id = $%d::bigint", argPos), *f.UserID)
+	// --- Filters ---
+	if f.UserID != nil {
+		builder = builder.Where(squirrel.Eq{UserIDCol: *f.UserID})
 	}
 	if f.After != nil {
-		addCond(fmt.Sprintf("%s >= $%d", shotExpr, argPos), *f.After)
+		builder = builder.Where(squirrel.GtOrEq{CreatedAtCol: *f.After})
 	}
 	if f.Before != nil {
-		addCond(fmt.Sprintf("%s <= $%d", shotExpr, argPos), *f.Before)
+		builder = builder.Where(squirrel.LtOrEq{CreatedAtCol: *f.Before})
 	}
 	if len(f.MimeLike) > 0 {
-		// ILIKE ANY($n) expects text[]
-		addCond(fmt.Sprintf("m.mime_type ILIKE ANY($%d)", argPos), f.MimeLike)
+		likes := make([]string, 0, len(f.MimeLike))
+		for _, v := range f.MimeLike {
+			likes = append(likes, "%"+v+"%")
+		}
+		or := squirrel.Or{}
+		for _, pattern := range likes {
+			or = append(or, squirrel.Like{MimeTypeCol: pattern})
+		}
+		builder = builder.Where(or)
 	}
 
-	// Sorting
-	baseQ.WriteString(fmt.Sprintf(" ORDER BY %s %s", sortField, orderDir))
+	// --- Sorting ---
+	if s.Field != "" {
+		dir := "ASC"
+		if s.Desc {
+			dir = "DESC"
+		}
+		builder = builder.OrderBy(fmt.Sprintf("%s %s", s.Field, dir))
+	} else {
+		builder = builder.OrderBy(fmt.Sprintf("%s DESC", CreatedAtCol))
+	}
 
-	// Pagination
+	// --- Pagination ---
 	if p.Limit > 0 {
-		baseQ.WriteString(fmt.Sprintf(" LIMIT $%d", argPos))
-		args = append(args, p.Limit)
-		argPos++
+		builder = builder.Limit(uint64(p.Limit))
 	}
 	if p.Offset > 0 {
-		baseQ.WriteString(fmt.Sprintf(" OFFSET $%d", argPos))
-		args = append(args, p.Offset)
-		argPos++
+		builder = builder.Offset(uint64(p.Offset))
 	}
 
-	// Run list query
-	rows, err := r.db.Query(ctx, baseQ.String(), args...)
+	query, args, err := builder.ToSql()
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("build media list: %w", err)
+	}
+
+	q := db.Query{
+		Name:     "MediaRepo.List",
+		QueryRaw: query,
+	}
+
+	rows, err := r.db.DB().QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("exec media list: %w", err)
 	}
 	defer rows.Close()
 
-	var out []*domain.Media
+	var results []*domain.Media
 	for rows.Next() {
 		var m domain.Media
-		var md domain.Metadata
-		err := rows.Scan(
-			&m.ID,
-			&m.UserID,
-			&m.URL,
-			&m.ThumbURL,
-			&m.MimeType,
-			&m.SizeBytes,
-			&m.Checksum,
-			&m.CreatedAt,
-			&md.DateTimeOriginal,
-			&md.Orientation,
-			&md.Width,
-			&md.Height,
-			&md.CameraMake,
-			&md.CameraModel,
-			&md.Software,
-		)
-		if err != nil {
-			return nil, 0, err
+		var meta domain.Metadata
+
+		if err := rows.Scan(
+			&m.ID, &m.UserID, &m.URL, &m.ThumbURL, &m.MimeType,
+			&m.SizeBytes, &m.Checksum, &m.CreatedAt,
+			&meta.DateTimeOriginal, &meta.Width, &meta.Height,
+			&meta.CameraMake, &meta.CameraModel, &meta.Software, &meta.Orientation,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scan media: %w", err)
 		}
-		m.Metadata = md
-		out = append(out, &m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
+
+		m.Metadata = meta
+		results = append(results, &m)
 	}
 
-	// Total count (same filters, no limit/offset)
+	// --- Total count ---
+	countBuilder := squirrel.
+		Select("COUNT(*)").
+		From(TableName).
+		PlaceholderFormat(squirrel.Dollar)
+
+	if f.UserID != nil {
+		countBuilder = countBuilder.Where(squirrel.Eq{UserIDCol: *f.UserID})
+	}
+	if f.After != nil {
+		countBuilder = countBuilder.Where(squirrel.GtOrEq{CreatedAtCol: *f.After})
+	}
+	if f.Before != nil {
+		countBuilder = countBuilder.Where(squirrel.LtOrEq{CreatedAtCol: *f.Before})
+	}
+	if len(f.MimeLike) > 0 {
+		or := squirrel.Or{}
+		for _, v := range f.MimeLike {
+			or = append(or, squirrel.Like{MimeTypeCol: "%" + v + "%"})
+		}
+		countBuilder = countBuilder.Where(or)
+	}
+
+	countQuery, countArgs, err := countBuilder.ToSql()
+	if err != nil {
+		return nil, 0, fmt.Errorf("build media count: %w", err)
+	}
+
+	countQ := db.Query{
+		Name:     "MediaRepo.ListCount",
+		QueryRaw: countQuery,
+	}
+
 	var total int
-	if err := r.db.QueryRow(ctx, countQ.String(), countArgs...).Scan(&total); err != nil {
-		return nil, 0, err
+	if err := r.db.DB().QueryRowContext(ctx, countQ, countArgs...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("exec media count: %w", err)
 	}
 
-	return out, total, nil
+	return results, total, nil
+}
+
+func (r *MediaRepo) Delete(ctx context.Context, userID, id int64) error {
+	query, args, err := squirrel.
+		Delete(TableName).
+		Where(squirrel.Eq{IDCol: id, UserIDCol: userID}).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build media delete: %w", err)
+	}
+
+	q := db.Query{
+		Name:     "MediaRepo.Delete",
+		QueryRaw: query,
+	}
+
+	tag, err := r.db.DB().ExecContext(ctx, q, args...)
+	if err != nil {
+		return fmt.Errorf("exec media delete: %w", err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("media not found or not owned by user %d", userID)
+	}
+
+	return nil
 }

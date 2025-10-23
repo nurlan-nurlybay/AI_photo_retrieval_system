@@ -11,7 +11,7 @@ import (
 type RetryWorker struct {
 	Repo     Repo
 	Faiss    VectorIndex
-	Interval time.Duration // e.g. 30 * time.Second
+	Interval time.Duration // e.g. 1 * time.Second
 	Batch    int           // e.g. 500
 
 	// If your FAISS service returns a recognizable "already exists" error list substrings here
@@ -20,7 +20,7 @@ type RetryWorker struct {
 
 func (w *RetryWorker) Run(ctx context.Context) error {
 	if w.Interval <= 0 {
-		w.Interval = 30 * time.Second
+		w.Interval = 1 * time.Second
 	}
 	if w.Batch <= 0 {
 		w.Batch = 500
