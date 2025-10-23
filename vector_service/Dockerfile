@@ -1,23 +1,38 @@
-# vector_service/Dockerfile
-FROM python:3.11-slim
+FROM python:3.11-slim AS base
 
-# Build tools and runtime libs needed by grpcio (pymilvus dep) and others
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    g++ gcc \
-    libatomic1 \
-    libgomp1 \
-    curl && \
-    rm -rf /var/lib/apt/lists/*
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=180
 
 WORKDIR /app
 
-# Install Python deps first (faiss-cpu, fastapi, uvicorn, numpy, etc.)
-COPY requirements.txt /app/requirements.txt
+# Install minimal system build deps and runtime libs
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        g++ gcc \
+        libatomic1 \
+        libgomp1 \
+        curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# --- Stage 2: Install Python deps (cached) ---
+FROM base AS deps
+
+COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy service code (expects app/main.py, app/…)
+# --- Stage 3: Final image ---
+FROM base
+
+# Copy installed packages only (so final image is smaller)
+COPY --from=deps /usr/local/lib/python3.11 /usr/local/lib/python3.11
+COPY --from=deps /usr/local/bin /usr/local/bin
+
+# Copy app source
 COPY app /app/app
 
 EXPOSE 8002
