@@ -14,7 +14,7 @@ type SearchService interface {
 type (
 	Embedder interface {
 		EmbedText(ctx context.Context, text string) ([]float64, error)
-		EmbedImage(ctx context.Context, data []byte, filename string) ([]float64, error)
+		EmbedImage(ctx context.Context, data []byte) ([]float64, error)
 	}
 
 	VectorIndex interface {

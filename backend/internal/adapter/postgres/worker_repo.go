@@ -25,21 +25,20 @@ func NewWorkRepo(db *pgxpool.Pool, seaweed Seaweed) worker.Repo {
 }
 
 // SeaweedFS fetch
-func (r *WorkRepo) LoadMediaBytes(ctx context.Context, mediaID int64) ([]byte, string, error) {
+func (r *WorkRepo) LoadMediaBytes(ctx context.Context, mediaID int64) ([]byte, error) {
 	var url string
-	var mimeType string
 
 	// Look up the URL and MIME type for the given media ID
 	err := r.DB.QueryRow(ctx, `
-		SELECT url, mime_type 
+		SELECT url  
 		FROM media 
 		WHERE id = $1
-	`, mediaID).Scan(&url, &mimeType)
+	`, mediaID).Scan(&url)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, "", fmt.Errorf("media %d not found", mediaID)
+			return nil, fmt.Errorf("media %d not found", mediaID)
 		}
-		return nil, "", fmt.Errorf("failed to query media: %w", err)
+		return nil, fmt.Errorf("failed to query media: %w", err)
 	}
 
 	// Remove URL part
@@ -48,10 +47,10 @@ func (r *WorkRepo) LoadMediaBytes(ctx context.Context, mediaID int64) ([]byte, s
 
 	data, err := r.Seaweed.Get(ctx, key)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to fetch media from storage: %w", err)
+		return nil, fmt.Errorf("failed to fetch media from storage: %w", err)
 	}
 
-	return data, mimeType, nil
+	return data, nil
 }
 
 // Embeddings table ops

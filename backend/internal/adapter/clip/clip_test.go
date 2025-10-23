@@ -12,7 +12,7 @@ import (
 func TestEmbedTextIntegration(t *testing.T) {
 	client, _ := clip.NewClient(
 		context.Background(),
-		config.Clip{Host: "localhost", Port: 8003},
+		config.Clip{Host: "localhost", Port: 8005},
 		&http.Client{},
 	)
 
