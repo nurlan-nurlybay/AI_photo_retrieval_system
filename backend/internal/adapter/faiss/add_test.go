@@ -29,7 +29,7 @@ func TestInsert_RealService(t *testing.T) {
 
 	t.Logf("sending vector of length %d", len(vec))
 
-	err := client.Insert(context.Background(), 1234, vec)
+	err := client.Insert(context.Background(), 404, 12345, vec)
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}

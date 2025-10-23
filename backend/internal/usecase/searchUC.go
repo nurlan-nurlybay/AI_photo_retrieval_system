@@ -6,19 +6,19 @@ import (
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
 )
 
-type SearchService interface {
-	SearchByText(ctx context.Context, userID int64, text string, k int) ([]*domain.Media, error)
-	SearchByImage(ctx context.Context, userID int64, img []byte, k int) ([]domain.Media, error)
-}
-
 type (
+	SearchService interface {
+		SearchByText(ctx context.Context, userID int64, text string, k int) ([]*domain.Media, error)
+		SearchByImage(ctx context.Context, userID int64, img []byte, k int) ([]domain.Media, error)
+	}
+
 	Embedder interface {
 		EmbedText(ctx context.Context, text string) ([]float32, error)
 		EmbedImage(ctx context.Context, data []byte) ([]float32, error)
 	}
 
 	VectorIndex interface {
-		Insert(ctx context.Context, id int64, vector []float32) error
+		Insert(ctx context.Context, userID, mediaId int64, vector []float32) error
 		Search(ctx context.Context, vector []float32, k int) ([]SearchResult, error)
 		Delete(ctx context.Context, id int64) error
 	}
