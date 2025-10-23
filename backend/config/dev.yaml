@@ -8,7 +8,8 @@ http:
   idleTimeout: 30s
 
 postgres:
-  host: "172.22.16.1"
+  # hostname -I
+  host: "localhost"  
   port: 5432
   user: "postgres"
   password: "postgres"
@@ -21,7 +22,7 @@ postgres:
   healthCheckPeriod: 300s
 
 redis:
-  addr: "localhost:6379"
+  addr: "localhost:6380"
   password: ""
   db: 0
   dialTimeout: 5s
@@ -29,19 +30,18 @@ redis:
   writeTimeout: 5s
   poolSize: 10
 
+seaweedfs:
+  baseURL: "http://localhost:8333"
+
 clip:
   host: "localhost"
-  port: 8003
-  timeout: 5s
-  maxIdleConn: 5
+  port: 8005
 
 faiss:
   host: "localhost"
-  port: 8002
-  protocol: "http"
-  timeout: 5s
+  port: 8006
   
 log:
-  level: "info"
+  level: "debug" 
   format: "text"
   sourceFolder: "backend"

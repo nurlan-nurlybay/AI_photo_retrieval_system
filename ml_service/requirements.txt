@@ -7,8 +7,8 @@ pydantic>=2.7,<3
 Pillow>=9.0.0
 
 # PyTorch CPU stack
-torch==2.4.1+cpu
-torchvision==0.19.1+cpu
+torch==2.4.1
+torchvision==0.19.1
 
 # Hugging Face (CLIPModel/CLIPProcessor)
 transformers==4.44.0

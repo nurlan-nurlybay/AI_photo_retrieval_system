@@ -8,20 +8,11 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	faissdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss/dto"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
 )
-
-// test-only constructor
-func NewClientWithBaseURL(baseURL string, timeout time.Duration) *Client {
-	return &Client{
-		baseURL: baseURL,
-		http:    &http.Client{Timeout: timeout},
-	}
-}
 
 type Client struct {
 	baseURL string
@@ -30,36 +21,30 @@ type Client struct {
 
 var _ usecase.VectorIndex = (*Client)(nil)
 
-func NewClient(ctx context.Context, cfg config.Faiss) (usecase.VectorIndex, error) {
+func NewClient(ctx context.Context, cfg config.Faiss, httpClient *http.Client) (usecase.VectorIndex, error) {
 	base := fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port)
 
 	client := &Client{
 		baseURL: base,
-		http: &http.Client{
-			Timeout: cfg.Timeout,
-		},
+		http:    httpClient,
 	}
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/healthz", nil)
-	resp, err := client.http.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to FAISS service at %s: %w", base, err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("FAISS service unhealthy (status %d)", resp.StatusCode)
+	if err := client.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("clip connection failed: %w", err)
 	}
 
 	return client, nil
 }
 
-func (c *Client) Insert(ctx context.Context, id int64, vector []float64) error {
+func (c *Client) Insert(ctx context.Context, userID, mediaID int64, vector []float32) error {
 	if len(vector) == 0 {
-		return fmt.Errorf("cannot insert empty vector for media_id=%d", id)
+		return fmt.Errorf("cannot insert empty vector for media_id=%d", mediaID)
 	}
+	namespace := fmt.Sprintf("u%d", userID)
 
 	req := faissdto.VectorAddRequest{
-		ID:        id,
+		Namespace: namespace,
+		ID:        mediaID,
 		Vector:    vector,
 		Normalize: true,
 	}
@@ -95,11 +80,12 @@ func (c *Client) Insert(ctx context.Context, id int64, vector []float64) error {
 	}
 
 	// Safe error dereference
-	if !out.Ok {
+	if !out.OK {
 		if out.Error != nil {
 			return fmt.Errorf("faiss error: %s", *out.Error)
 		}
-		return fmt.Errorf("faiss returned not ok")	}
+		return fmt.Errorf("faiss returned not ok")
+	}
 
 	// heck for returned dim
 	if out.Dim != nil && *out.Dim != len(vector) {
@@ -109,44 +95,47 @@ func (c *Client) Insert(ctx context.Context, id int64, vector []float64) error {
 	return nil
 }
 
-func (c *Client) Search(ctx context.Context, vector []float64, k int) ([]usecase.SearchResult, error) {
-	req := faissdto.VectorSearchRequest{
+func (c *Client) Search(ctx context.Context, userID int64, vector []float32, k int) ([]usecase.SearchResult, error) {
+	namespace := fmt.Sprintf("u%d", userID)
+
+	reqBody := faissdto.VectorSearchRequest{
+		Namespace: &namespace,
 		Vector:    vector,
 		K:         k,
 		Normalize: true,
 	}
 
-	body, err := json.Marshal(req)
+	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal search request: %w", err)
 	}
 
-	url := c.baseURL + "/v1/vectors/search"
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(body))
+	url := fmt.Sprintf("%s/v1/vectors/search", c.baseURL)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("build search request: %w", err)
+		return nil, fmt.Errorf("create search request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("send search request: %w", err)
+		return nil, fmt.Errorf("search request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	var out faissdto.VectorSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	var sr faissdto.VectorSearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
 		return nil, fmt.Errorf("decode search response: %w", err)
 	}
-	if !out.Ok {
-		return nil, fmt.Errorf("faiss search failed: %v", out.Error)
+
+	if !sr.OK {
+		if sr.Error != nil {
+			return nil, fmt.Errorf("vector search failed: %s", *sr.Error)
+		}
+		return nil, fmt.Errorf("vector search failed with unknown error")
 	}
 
-	results := make([]usecase.SearchResult, len(out.Results))
-	for i, r := range out.Results {
-		results[i] = usecase.SearchResult{ID: r.ID, Score: r.Score}
-	}
-	return results, nil
+	return sr.Results, nil
 }
 
 func (c *Client) Delete(ctx context.Context, id int64) error {
@@ -174,8 +163,27 @@ func (c *Client) Delete(ctx context.Context, id int64) error {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return fmt.Errorf("decode delete response: %w", err)
 	}
-	if !out.Ok {
+	if !out.OK {
 		return fmt.Errorf("faiss delete failed: %v", out.Error)
+	}
+
+	return nil
+}
+
+func (c *Client) Ping(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/healthz", nil)
+	if err != nil {
+		return fmt.Errorf("failed to create ping request: %w", err)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("ping request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("ping returned non-OK status: %d", resp.StatusCode)
 	}
 
 	return nil

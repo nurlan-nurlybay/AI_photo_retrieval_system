@@ -10,10 +10,10 @@ type Media struct {
 	UserID    int64
 	URL       string
 	ThumbURL  string
-	MimeType  string
+	MimeType  string // e.g. "image/jpeg", "image/png", "image/heic".
 	SizeBytes int64
-	Checksum  string    // e.g., SHA256 for dedup
-	CreatedAt time.Time // server insert time
+	Checksum  string // e.g. SHA256 for dedup
+	CreatedAt time.Time
 	Metadata  Metadata
 }
 
@@ -22,7 +22,6 @@ type Metadata struct {
 	Orientation      int
 	Width            int
 	Height           int
-	FileFormat       string // "jpeg","png","heic"
 	CameraMake       string
 	CameraModel      string
 	Software         string
@@ -43,7 +42,7 @@ type Sort struct {
 }
 
 type MediaRepository interface {
-	Create(ctx context.Context, m *Media) error
+	Create(ctx context.Context, m *Media) (int64, error)
 	Delete(ctx context.Context, uID, mID int64) error
 	Get(ctx context.Context, uID, mID int64) (*Media, error)
 	List(ctx context.Context, f MediaFilter, p Page, s Sort) ([]*Media, int, error)
@@ -59,4 +58,9 @@ type Embedder interface {
 
 type VectorIndex interface {
 	Search(deviceID string, embedding []float32, k int) ([]string, error)
+}
+
+type MediaWithScore struct {
+	Media *Media
+	Score float32
 }

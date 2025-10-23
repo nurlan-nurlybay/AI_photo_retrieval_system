@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
@@ -40,12 +41,33 @@ func (c *Client) Enqueue(ctx context.Context, key string, payload []byte) error 
 	return c.rdb.RPush(ctx, key, payload).Err()
 }
 
+// func (c *Client) DequeueBlock(ctx context.Context, key string, timeoutSeconds int) (string, []byte, error) {
+// 	// BRPOP returns list [key, value]
+// 	res, err := c.rdb.BRPop(ctx, 0*time.Second, key).Result()
+// 	if err != nil {
+// 		return "", nil, err
+// 	}
+// 	// res[0] is key, res[1] is value
+// 	return res[0], []byte(res[1]), nil
+// }
+
 func (c *Client) DequeueBlock(ctx context.Context, key string, timeoutSeconds int) (string, []byte, error) {
-	// BRPOP returns list,key and value; we just care about value
-	res, err := c.rdb.BRPop(ctx, time.Duration(timeoutSeconds)*time.Second, key).Result()
-	if err != nil {
-		return "", nil, err
+	for {
+		// BRPop with a real timeout
+		res, err := c.rdb.BRPop(ctx, time.Duration(timeoutSeconds)*time.Second, key).Result()
+		if err != nil {
+			if err == redis.Nil {
+				// no job yet, just loop and retry
+				continue
+			}
+			return "", nil, fmt.Errorf("redis BRPop failed: %w", err)
+		}
+
+		if len(res) != 2 {
+			// invalid response from Redis, just continue
+			continue
+		}
+
+		return res[0], []byte(res[1]), nil
 	}
-	// res[0] is key, res[1] is value
-	return res[0], []byte(res[1]), nil
 }

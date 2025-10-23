@@ -2,17 +2,17 @@ package worker
 
 import (
 	"context"
-	"encoding/binary"
-	"math"
 	"time"
+
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
 )
 
 // sweep pending/failed, replay to FAISS, set status
 type RetryWorker struct {
-	Repo     Repo
-	Faiss    VectorIndex
-	Interval time.Duration // e.g. 30 * time.Second
-	Batch    int           // e.g. 500
+	EmbeddingsRepo EmbeddingsRepo
+	Faiss          VectorIndex
+	Interval       time.Duration // e.g. 1 * time.Second
+	Batch          int           // e.g. 500
 
 	// If your FAISS service returns a recognizable "already exists" error list substrings here
 	AlreadyExistsSubstrings []string
@@ -20,7 +20,7 @@ type RetryWorker struct {
 
 func (w *RetryWorker) Run(ctx context.Context) error {
 	if w.Interval <= 0 {
-		w.Interval = 30 * time.Second
+		w.Interval = 1 * time.Second
 	}
 	if w.Batch <= 0 {
 		w.Batch = 500
@@ -40,61 +40,32 @@ func (w *RetryWorker) Run(ctx context.Context) error {
 }
 
 func (w *RetryWorker) step(ctx context.Context) {
-	ids, err := w.Repo.ListUnindexed(ctx, w.Batch)
+	// TODO userID
+	ids, err := w.EmbeddingsRepo.ListUnindexed(ctx, 0, w.Batch)
 	if err != nil || len(ids) == 0 {
 		return
 	}
-	for _, id := range ids {
-		vb, err := w.Repo.GetEmbeddingBytes(ctx, id)
+	for _, mediaID := range ids {
+		vb, err := w.EmbeddingsRepo.GetEmbeddingBytes(ctx, 0, mediaID)
 		if err != nil || len(vb) == 0 {
-			_ = w.Repo.MarkFailed(ctx, id, truncateErr(err))
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, domain.TruncateErr(err))
 			continue
 		}
-		vec := bytesToF64LE(vb)
+		vec := domain.BytesToFloat32(vb)
 
-		if err := w.Faiss.Insert(ctx, id, vec); err != nil {
+		if err := w.Faiss.Insert(ctx, 404, mediaID, vec); err != nil {
 			if isAlreadyExists(err, w.AlreadyExistsSubstrings) {
-				_ = w.Repo.MarkInIndex(ctx, id)
+				_ = w.EmbeddingsRepo.MarkInIndex(ctx, 404, mediaID)
 				continue
 			}
-			_ = w.Repo.MarkFailed(ctx, id, truncateErr(err))
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, domain.TruncateErr(err))
 			continue
 		}
-		_ = w.Repo.MarkInIndex(ctx, id)
+		_ = w.EmbeddingsRepo.MarkInIndex(ctx, 404, mediaID)
 	}
 }
 
 // ===== Helpers =====
-func f64ToLEf32(v []float64) []byte {
-	out := make([]byte, 4*len(v))
-	for i, x := range v {
-		f := float32(x)
-		binary.LittleEndian.PutUint32(out[4*i:], math.Float32bits(f))
-	}
-	return out
-}
-
-func bytesToF64LE(b []byte) []float64 {
-	n := len(b) / 4
-	out := make([]float64, n)
-	for i := 0; i < n; i++ {
-		u := binary.LittleEndian.Uint32(b[i*4:])
-		out[i] = float64(math.Float32frombits(u))
-	}
-	return out
-}
-
-func truncateErr(err error) string {
-	if err == nil {
-		return ""
-	}
-	s := err.Error()
-	if len(s) > 500 {
-		s = s[:500]
-	}
-	return s
-}
-
 func isAlreadyExists(err error, needles []string) bool {
 	if err == nil {
 		return false

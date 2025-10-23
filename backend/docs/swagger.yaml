@@ -1,0 +1,108 @@
+basePath: /api
+definitions:
+  httpdto.UploadItem:
+    properties:
+      checksum:
+        type: string
+      created_at:
+        description: RFC3339
+        type: string
+      height:
+        type: integer
+      id:
+        type: integer
+      mime_type:
+        type: string
+      size_bytes:
+        type: integer
+      taken_at:
+        description: RFC3339, empty if unknown
+        type: string
+      thumb_url:
+        type: string
+      url:
+        type: string
+      width:
+        type: integer
+    type: object
+  httpdto.UploadResponse:
+    properties:
+      results:
+        items:
+          $ref: '#/definitions/httpdto.UploadResult'
+        type: array
+      summary:
+        properties:
+          duplicates:
+            type: integer
+          failed:
+            type: integer
+          saved:
+            type: integer
+          total:
+            type: integer
+        type: object
+    type: object
+  httpdto.UploadResult:
+    properties:
+      error:
+        description: present if Status == "failed"
+        type: string
+      filename:
+        type: string
+      media:
+        allOf:
+        - $ref: '#/definitions/httpdto.UploadItem'
+        description: present if saved or duplicate
+      status:
+        description: '"saved" | "duplicate" | "failed" | "skipped"'
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: REST API for searching and uploading images using AI-based embeddings
+  title: AI Photo Retrieval System API
+  version: "1.0"
+paths:
+  /api/upload/image:
+    post:
+      consumes:
+      - multipart/form-data
+      description: |-
+        Uploads between 1 and 100 images in a single multipart/form-data request.
+        - Each file must be a JPEG or PNG.
+        - The `dedup` parameter can be used to enable or disable duplicate image checking.
+      parameters:
+      - description: An array of image files (JPEG/PNG)
+        in: formData
+        name: files
+        required: true
+        type: file
+      - description: 'Enable duplicate check (default: true)'
+        in: formData
+        name: dedup
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpdto.UploadResponse'
+        "400":
+          description: Invalid request or file format
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Upload multiple images
+      tags:
+      - media
+swagger: "2.0"

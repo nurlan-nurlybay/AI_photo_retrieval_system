@@ -13,21 +13,24 @@ type SearchImageRequest struct {
 	File   *multipart.FileHeader `form:"image" binding:"required"`
 }
 
+// Unified response for both text and image search
 type SearchResponse struct {
 	Results []MediaResponse `json:"results"`
 	Total   int             `json:"total"`
 }
 
+// Each media item now includes similarity score
 type MediaResponse struct {
-	ID       int64  `json:"id"`
-	UserID   int64  `json:"user_id"`
-	URL      string `json:"url"`
-	ThumbURL string `json:"thumb_url"`
+	ID       int64   `json:"id"`
+	UserID   int64   `json:"user_id"`
+	URL      string  `json:"url"`
+	ThumbURL string  `json:"thumb_url"`
+	Score    float32 `json:"score,omitempty"` // <-- added field
 }
 
 // Upload Image
 type UploadRequest struct {
-	Files []*multipart.FileHeader `form:"files[]" binding:"required,min=1,max=10"`
+	Files []*multipart.FileHeader `form:"files[]" binding:"required,min=1,max=100"`
 	Dedup bool                    `form:"dedup,default=true"`
 }
 
