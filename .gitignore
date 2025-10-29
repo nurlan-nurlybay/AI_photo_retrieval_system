@@ -4,7 +4,8 @@ seaweed_data/
 .venv/
 backend/bin/
 
-
+frontend_flutter/**/generated_*
+frontend_flutter/**/GeneratedPluginRegistrant.*
 
 timeweb
 timeweb.pub
@@ -169,6 +170,9 @@ volumes/
 seaweed-data/
 api_data/
 seaweed-data/
+
+# Testing files
+testing_nurlan/
 
 # docker_dev bullshi
 .devcontainer/
