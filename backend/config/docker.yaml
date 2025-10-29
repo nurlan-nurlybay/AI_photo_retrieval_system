@@ -35,7 +35,7 @@ clip:
 
 faiss:
   host: "vector_service"
-  port: 8002
+  port: 19530
 
 log:
   level: "info" # "info", "debug", "warn", "error"
