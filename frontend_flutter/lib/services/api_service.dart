@@ -101,7 +101,7 @@ class ApiService {
 
     // Add the image file with correct key name: 'image'
     final multipartFile = await http.MultipartFile.fromPath(
-      'image', // must match `form:"image"` in Go struct
+      'file', // must match `form:"image"` in Go struct
       image.path,
     );
     request.files.add(multipartFile);
