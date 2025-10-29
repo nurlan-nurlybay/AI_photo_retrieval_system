@@ -58,3 +58,26 @@ class VectorSearchResponse(BaseModel):
     degraded: bool = False
     tookMs: Optional[int] = None
     error: Optional[str] = None
+
+
+# ---------- Namespace Management ----------
+class NamespaceListResponse(BaseModel):
+    ok: bool
+    namespaces: List[str] = Field(default_factory=list)
+    count: int = 0
+    error: Optional[str] = None
+
+
+class NamespaceDeleteResponse(BaseModel):
+    ok: bool
+    namespace: str
+    deleted: bool
+    error: Optional[str] = None
+
+
+class ClearAllResponse(BaseModel):
+    ok: bool
+    deleted_namespaces: int = 0
+    total_namespaces: int = 0
+    errors: List[str] = Field(default_factory=list)
+    error: Optional[str] = None

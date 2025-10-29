@@ -2,7 +2,7 @@ import threading
 import numpy as np
 from typing import List, Dict, Any
 
-from .milvus_client import get_collection, health as milvus_health, VECTOR_DIM
+from .milvus_client import get_collection, health as milvus_health, VECTOR_DIM, list_collections, drop_collection
 
 # Keep thread-safety similar to FAISS version
 LOCK = threading.RLock()
@@ -15,9 +15,13 @@ def _to_np(vec: List[float]) -> np.ndarray:
 
 
 def _normalize(arr: np.ndarray) -> np.ndarray:
+    """Normalize vectors to unit length with numerical stability"""
     norms = np.linalg.norm(arr, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    return arr / norms
+    # Avoid division by zero and ensure numerical stability
+    norms = np.where(norms == 0, 1.0, norms)
+    normalized = arr / norms
+    # Clamp to prevent values slightly above 1.0 due to floating-point precision
+    return np.clip(normalized, -1.0, 1.0)
 
 
 def health() -> Dict[str, Any]:
@@ -87,7 +91,8 @@ def search(namespace: str, vector: List[float], k: int, normalize: bool = True) 
         )
 
     hits = res[0] if res else []
-    results = [{"id": int(hit.id), "score": float(hit.distance)} for hit in hits]
+    # Clamp scores to valid range [0, 1] to handle floating-point precision issues
+    results = [{"id": int(hit.id), "score": float(np.clip(hit.distance, 0.0, 1.0))} for hit in hits]
 
     return {
         "ok": True,
@@ -96,3 +101,70 @@ def search(namespace: str, vector: List[float], k: int, normalize: bool = True) 
         "results": results,
         "degraded": False,
     }
+
+
+def list_namespaces() -> Dict[str, Any]:
+    """List all available namespaces (collections)"""
+    try:
+        collections = list_collections()
+        return {
+            "ok": True,
+            "namespaces": collections,
+            "count": len(collections)
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e),
+            "namespaces": [],
+            "count": 0
+        }
+
+
+def delete_namespace(namespace: str) -> Dict[str, Any]:
+    """Delete a specific namespace (collection)"""
+    try:
+        with LOCK:
+            dropped = drop_collection(namespace)
+        return {
+            "ok": True,
+            "namespace": namespace,
+            "deleted": dropped
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "namespace": namespace,
+            "deleted": False,
+            "error": str(e)
+        }
+
+
+def clear_all_data() -> Dict[str, Any]:
+    """Clear all data (drop all collections)"""
+    try:
+        collections = list_collections()
+        deleted_count = 0
+        errors = []
+
+        with LOCK:
+            for namespace in collections:
+                try:
+                    if drop_collection(namespace):
+                        deleted_count += 1
+                except Exception as e:
+                    errors.append(f"{namespace}: {str(e)}")
+
+        return {
+            "ok": True,
+            "deleted_namespaces": deleted_count,
+            "total_namespaces": len(collections),
+            "errors": errors
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e),
+            "deleted_namespaces": 0,
+            "total_namespaces": 0
+        }
