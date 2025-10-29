@@ -7,7 +7,7 @@ import '../widgets/image_grid.dart';
 import 'package:frontend_flutter/data/api_client.dart';
 import 'package:frontend_flutter/data/models.dart';
 import 'package:frontend_flutter/ui/widgets/image_grid.dart';
-
+import 'package:frontend_flutter/data/relevance.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -31,7 +31,8 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() { _busy = true; _results = []; });
     try {
       final res = await _api.textSearch(q);
-      setState(() => _results = res.results);
+      final filtered = Relevance.relativeToMax(res.results, alpha: 0.85);
+      setState(() => _results = filtered);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Search failed: $e')));
     } finally {
@@ -55,7 +56,8 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() { _busy = true; _results = []; });
     try {
       final res = await _api.imageSearch(_probe!);
-      setState(() => _results = res.results);
+      final filtered = Relevance.relativeToMax(res.results, alpha: 0.88);
+      setState(() => _results = filtered);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Image search failed: $e')));
     } finally {
