@@ -171,6 +171,9 @@ seaweed-data/
 api_data/
 seaweed-data/
 
+# Testing files
+testing_nurlan/
+
 # docker_dev bullshi
 .devcontainer/
 .vscode/
