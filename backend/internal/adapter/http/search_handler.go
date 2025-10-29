@@ -1,6 +1,7 @@
 package http
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -48,23 +49,19 @@ func (h *SearchHandler) SearchByImage(c *gin.Context) {
 		return
 	}
 
-	file, _, err := c.Request.FormFile("file")
+	// Open uploaded file
+	file, err := req.File.Open()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing image"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot open file"})
 		return
 	}
 	defer file.Close()
 
-	imgBytes := make([]byte, 0)
-	buf := make([]byte, 1024)
-	for {
-		n, err := file.Read(buf)
-		if n > 0 {
-			imgBytes = append(imgBytes, buf[:n]...)
-		}
-		if err != nil {
-			break
-		}
+	// Read file bytes
+	imgBytes, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read file"})
+		return
 	}
 
 	media, err := h.searchUC.SearchByImage(c.Request.Context(), req.UserID, imgBytes, 10)
