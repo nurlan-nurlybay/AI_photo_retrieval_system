@@ -89,3 +89,27 @@ def health() -> dict:
             "error": str(e),
             "collections": {}
         }
+
+
+def list_collections() -> list[str]:
+    """List all available collections (namespaces)"""
+    connect()
+    try:
+        return utility.list_collections()
+    except Exception:
+        return []
+
+
+def drop_collection(namespace: str) -> bool:
+    """Drop a specific collection (namespace)"""
+    connect()
+    try:
+        if utility.has_collection(namespace):
+            utility.drop_collection(namespace)
+            # Remove from our cache
+            if namespace in _collections:
+                del _collections[namespace]
+            return True
+        return False
+    except Exception:
+        return False

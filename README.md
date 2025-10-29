@@ -45,7 +45,24 @@ curl -X POST 'http://ml_service:8003/v1/encode/image/?model=openai/clip-vit-base
   -F 'files=@/path/to/img1.jpg' -F 'files=@/path/to/img2.jpg'
 ```
 
-3) GET `/healthz`
+3) POST `/encode/image/url/`
+- Body JSON:
+  - `urls` (required): list of image URLs
+  - `options.model` (optional, default: `openai/clip-vit-base-patch32`)
+  - `options.normalize` (optional, default: true)
+  - `options.quantize` (optional, default: true)
+- Response JSON:
+  - `vectors`: list of 512-float vectors
+- Example:
+```
+POST /v1/encode/image/url/
+{
+  "urls": ["https://example.com/image1.jpg", "https://example.com/image2.jpg"],
+  "options": { "normalize": true, "quantize": true }
+}
+```
+
+4) GET `/healthz`
 - Response: `{ "ok": true }`
 
 Notes:
@@ -153,6 +170,11 @@ curl -s http://localhost:8006/v1/healthz | jq -c; echo ""
 curl -s -X POST http://localhost:8005/v1/encode/text/ \
   -H "Content-Type: application/json" \
   -d '{"req":{"texts":["a photo of a dog"]}}' | tee text_vec.json
+
+# Encode images from URLs
+curl -s -X POST http://localhost:8005/v1/encode/image/url/ \
+  -H "Content-Type: application/json" \
+  -d '{"urls":["https://example.com/image.jpg"],"options":{"normalize":true}}' | tee url_vec.json
 
 # Add vector (example)
 curl -s -X POST http://localhost:8006/v1/vectors/add \
