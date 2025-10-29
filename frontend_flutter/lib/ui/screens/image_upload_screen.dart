@@ -5,6 +5,7 @@ import '../../data/api_client.dart';
 import '../../data/models.dart';
 import 'package:frontend_flutter/data/api_client.dart';
 import 'package:frontend_flutter/data/models.dart';
+import 'package:frontend_flutter/ui/util/pick.dart';
 
 
 class ImageUploadScreen extends StatefulWidget {
@@ -20,17 +21,24 @@ class _ImageUploadScreenState extends State<ImageUploadScreen> {
   bool _busy = false;
   UploadResponseModel? _last;
 
-  Future<void> _pickImages() async {
-    final res = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-      type: FileType.image,
-    );
-    if (res == null) return;
+Future<void> _pickImages() async {
+  try {
+    final files = await pickImagesMulti();
+    if (!mounted) return;
     setState(() {
-      _picked = res.paths.whereType<String>().map((p) => File(p)).toList();
+      _picked = files;
       _last = null;
     });
+    if (files.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No images selected')));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Selected ${files.length} images')));
+    }
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error picking images: $e')));
   }
+}
 
   Future<void> _upload() async {
     if (_picked.isEmpty) {
