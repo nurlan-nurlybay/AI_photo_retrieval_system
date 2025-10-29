@@ -4,6 +4,7 @@ from app.models import (
     VectorAddRequest, VectorAddResponse,
     VectorDeleteRequest, VectorDeleteResponse,
     VectorSearchRequest, VectorSearchResponse,
+    NamespaceListResponse, NamespaceDeleteResponse, ClearAllResponse,
 )
 import app.index_milvus as idx
 import traceback
@@ -109,6 +110,49 @@ def search_vector(req: VectorSearchRequest):
                 "error": str(e) or "index_search_failed",
                 "k": req.k,
             },
+        )
+
+
+# ---------- Namespace Management ----------
+@app.get("/v1/namespaces", response_model=NamespaceListResponse)
+def list_namespaces():
+    """List all available namespaces (collections)"""
+    try:
+        result = idx.list_namespaces()
+        return NamespaceListResponse(**result)
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": str(e), "namespaces": [], "count": 0}
+        )
+
+
+@app.delete("/v1/namespaces/{namespace}", response_model=NamespaceDeleteResponse)
+def delete_namespace(namespace: str):
+    """Delete a specific namespace (collection)"""
+    try:
+        result = idx.delete_namespace(namespace)
+        return NamespaceDeleteResponse(**result)
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "namespace": namespace, "deleted": False, "error": str(e)}
+        )
+
+
+@app.delete("/v1/namespaces", response_model=ClearAllResponse)
+def clear_all_data():
+    """Clear all data (drop all collections)"""
+    try:
+        result = idx.clear_all_data()
+        return ClearAllResponse(**result)
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": str(e), "deleted_namespaces": 0, "total_namespaces": 0}
         )
 
 
