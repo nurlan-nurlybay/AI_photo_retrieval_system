@@ -10,7 +10,7 @@ type SearchTextRequest struct {
 
 type SearchImageRequest struct {
 	UserID int64                 `form:"user_id" binding:"required"`
-	File   *multipart.FileHeader `form:"image" binding:"required"`
+	File   *multipart.FileHeader `form:"file" binding:"required"`
 }
 
 type SearchResponse struct {

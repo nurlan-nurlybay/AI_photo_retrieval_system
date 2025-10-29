@@ -49,13 +49,14 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	log.Info("connected to Postgres", "DSN", cfg.Postgres.DSN())
 
 	httpClient := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 1000 * time.Second,
 		Transport: &http.Transport{
-			MaxIdleConns:       100,
-			IdleConnTimeout:    90 * time.Second,
+			MaxIdleConns:       1000,
+			IdleConnTimeout:    900 * time.Second,
 			DisableCompression: false,
 		},
 	}
+	fmt.Println("httpClient", httpClient.Timeout)
 
 	// Prep dependencies
 	clipClient, err := clipadapter.NewClient(ctx, cfg.Clip, httpClient)

@@ -66,24 +66,14 @@ func (h *SearchHandler) SearchByImage(c *gin.Context) {
 		return
 	}
 
-	file, _, err := c.Request.FormFile("image")
+	// Open uploaded file
+	file, err := req.File.Open()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing image"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot open file"})
 		return
 	}
 	defer file.Close()
 
-	// imgBytes := make([]byte, 0)
-	// buf := make([]byte, 1024)
-	// for {
-	// 	n, err := file.Read(buf)
-	// 	if n > 0 {
-	// 		imgBytes = append(imgBytes, buf[:n]...)
-	// 	}
-	// 	if err != nil {
-	// 		break
-	// 	}
-	// }
 	imgBytes, err := io.ReadAll(file)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read image"})
@@ -127,18 +117,27 @@ func (h *SearchHandler) handleError(c *gin.Context, err error) {
 
 // On error writes the HTTP 400 and returns false
 func BindAndValidate(c *gin.Context, validate *validator.Validate, obj interface{}) bool {
-	if err := c.ShouldBindJSON(obj); err != nil {
+	ct := c.ContentType()
+	var err error
+
+	if ct == "application/json" {
+		err = c.ShouldBindJSON(obj)
+	} else {
+		err = c.ShouldBind(obj) // handles form, query, multipart, etc.
+	}
+
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		// c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
 		return false
 	}
+
 	if err := validate.Struct(obj); err != nil {
-		// pick the first field error
 		ve := err.(validator.ValidationErrors)[0]
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": ve.Field() + " failed " + ve.Tag(),
 		})
 		return false
 	}
+
 	return true
 }
