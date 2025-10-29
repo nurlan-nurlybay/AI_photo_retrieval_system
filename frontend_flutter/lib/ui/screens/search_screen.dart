@@ -8,6 +8,7 @@ import 'package:frontend_flutter/data/api_client.dart';
 import 'package:frontend_flutter/data/models.dart';
 import 'package:frontend_flutter/ui/widgets/image_grid.dart';
 import 'package:frontend_flutter/data/relevance.dart';
+import 'package:frontend_flutter/ui/util/pick.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -40,13 +41,20 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  Future<void> _pickProbe() async {
-    final res = await FilePicker.platform.pickFiles(allowMultiple: false, type: FileType.image);
-    if (res == null || res.files.single.path == null) return;
-    setState(() {
-      _probe = File(res.files.single.path!);
-    });
+Future<void> _pickProbe() async {
+  try {
+    final f = await pickImageSingle();
+    if (!mounted) return;
+    if (f == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selection cancelled')));
+      return;
+    }
+    setState(() => _probe = f);
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
   }
+}
 
   Future<void> _doImageSearch() async {
     if (_probe == null) {
@@ -56,7 +64,7 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() { _busy = true; _results = []; });
     try {
       final res = await _api.imageSearch(_probe!);
-      final filtered = Relevance.relativeToMax(res.results, alpha: 0.88);
+      final filtered = Relevance.relativeToMax(res.results, alpha: 0.6);
       setState(() => _results = filtered);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Image search failed: $e')));
