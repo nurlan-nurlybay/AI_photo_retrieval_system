@@ -64,7 +64,7 @@ Future<void> _pickProbe() async {
     setState(() { _busy = true; _results = []; });
     try {
       final res = await _api.imageSearch(_probe!);
-      final filtered = Relevance.relativeToMax(res.results, alpha: 0.6);
+      final filtered = Relevance.relativeToMax(res.results, alpha: 0.7);
       setState(() => _results = filtered);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Image search failed: $e')));
