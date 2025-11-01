@@ -6,17 +6,12 @@ WORKDIR /app
 # Install libvips + build tools
 RUN apk add --no-cache build-base vips-dev git
 
-# Copy Go modules
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy project files
 COPY . .
-
-# Enable CGO
 ENV CGO_ENABLED=1
 
-# Build the Go binary
 RUN go build -ldflags="-s -w" -o photo-backend ./cmd/api
 
 # ---- Runtime stage ----

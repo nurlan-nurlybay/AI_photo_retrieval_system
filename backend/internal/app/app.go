@@ -46,7 +46,6 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	dbClient := InitDB(ctx, cfg.Postgres.DSN())
 	mediaRepo := postgresadapter.NewMediaRepo(dbClient)
 	embeddingsRepo := postgresadapter.NewEmbeddingsRepo(dbClient)
-	log.Info("connected to Postgres", "DSN", cfg.Postgres.DSN())
 
 	httpClient := &http.Client{
 		Timeout: 1000 * time.Second,
