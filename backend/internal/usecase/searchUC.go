@@ -47,7 +47,6 @@ func NewSearchService(mediaRepo domain.MediaRepository, embedder Embedder, vecto
 }
 
 func (s *searchService) SearchByText(ctx context.Context, userID int64, text string, k int) ([]*domain.MediaWithScore, error) {
-
 	embedding, err := s.embedder.EmbedText(ctx, text)
 	if err != nil {
 		return nil, err
@@ -63,7 +62,7 @@ func (s *searchService) SearchByText(ctx context.Context, userID int64, text str
 	for _, r := range results { // r.ID, r.Score
 		media, err := s.mediaRepo.Get(ctx, userID, r.ID)
 		if err != nil {
-			continue // optionally skip missing media
+			continue // skip missing media
 		}
 		out = append(out, &domain.MediaWithScore{
 			Media: media,
@@ -71,7 +70,7 @@ func (s *searchService) SearchByText(ctx context.Context, userID int64, text str
 		})
 	}
 
-	// s.log.DebugContext(ctx, "search results FAISS", "res:", results)
+	s.log.InfoContext(ctx, "search by text", "result:", results)
 
 	return out, nil
 }
@@ -92,7 +91,7 @@ func (s *searchService) SearchByImage(ctx context.Context, userID int64, img []b
 	for _, r := range results {
 		media, err := s.mediaRepo.Get(ctx, userID, r.ID)
 		if err != nil {
-			continue 
+			continue
 		}
 		out = append(out, &domain.MediaWithScore{
 			Media: media,
@@ -100,7 +99,7 @@ func (s *searchService) SearchByImage(ctx context.Context, userID int64, img []b
 		})
 	}
 
-	// s.log.DebugContext(ctx, "search results FAISS", "res:", results)
+	s.log.InfoContext(ctx, "search by image", "result:", results)
 
 	return out, nil
 }

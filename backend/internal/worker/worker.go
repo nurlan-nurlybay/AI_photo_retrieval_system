@@ -107,7 +107,7 @@ func (w *EmbedWorker) Run(ctx context.Context) error {
 }
 
 func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob) error {
-	w.Log.DebugContext(ctx, "fetching media bytes", "media_id", job.MediaID)
+	w.Log.InfoContext(ctx, "fetching media bytes", "media_id", job.MediaID)
 
 	// Fetch media
 	media, err := w.MediaRepo.Get(ctx, job.UserID, job.MediaID)

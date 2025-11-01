@@ -35,8 +35,8 @@ type (
 		User              string        `yaml:"user"`
 		Password          string        `yaml:"password"`
 		DBName            string        `yaml:"dbname"`
-		SSLMode           string        `yaml:"sslmode"`      // "disable", "require", "verify-full"		MaxOpenConns      int           `yaml:"maxOpenConns"`
-		MaxOpenConns      int           `yaml:"maxOpenConns"` // total connections in pool
+		SSLMode           string        `yaml:"sslmode"` // "disable", "require", "verify-full"
+		MaxOpenConns      int           `yaml:"maxOpenConns"`
 		MaxIdleConns      int           `yaml:"maxIdleConns"`
 		ConnMaxLifetime   time.Duration `yaml:"connMaxLifetime"`   // recycle after e.g. 1h
 		ConnMaxIdleTime   time.Duration `yaml:"connMaxIdleTime"`   // close idle after e.g. 10m
@@ -58,13 +58,13 @@ type (
 	}
 
 	Clip struct {
-		Host string `yaml:"host"` // clip-service
-		Port uint16 `yaml:"port"` // 9000
+		Host string `yaml:"host"`
+		Port uint16 `yaml:"port"`
 	}
 
 	Faiss struct {
-		Host string `yaml:"host"` // faiss-service
-		Port uint16 `yaml:"port"` // 9000
+		Host string `yaml:"host"`
+		Port uint16 `yaml:"port"`
 	}
 
 	Log struct {

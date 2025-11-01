@@ -83,30 +83,21 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 	out := make([]ucdto.UploadResult, 0, len(items))
 
 	for i, it := range items {
-		s.log.DebugContext(ctx, "processing upload item",
-			"index", i,
-			"filename", it.Filename,
-			"user_id", it.UserID,
-			"mime_type", it.MimeType,
-		)
-
 		// Read all inmemory
-		// TODO: streaming/tempfile later
+		// TODO: streaming/tempfile
 		buf := new(bytes.Buffer)
 		if _, err := buf.ReadFrom(it.Body); err != nil {
 			s.log.ErrorContext(ctx, "failed to read request body", "index", i, "error", err)
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
 			continue
 		}
-		s.log.DebugContext(ctx, "read upload body", "index", i, "bytes", buf.Len())
 
 		// Compute checksum for idempotency
 		sum := sha256.Sum256(buf.Bytes())
-		check := hex.EncodeToString(sum[:])
-		s.log.DebugContext(ctx, "checksum computed", "index", i, "checksum", check)
+		checksum := hex.EncodeToString(sum[:])
 
 		// Dedup check
-		existing, err := s.repo.GetByChecksum(ctx, it.UserID, check)
+		existing, err := s.repo.GetByChecksum(ctx, it.UserID, checksum)
 		if err != nil {
 			s.log.ErrorContext(ctx, "dedup lookup failed", "index", i, "error", err)
 		}
@@ -132,27 +123,24 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
 			continue
 		}
-		s.log.DebugContext(ctx, "image processed", "index", i, "width", w, "height", h)
 
 		// Store original img
-		keyOrig := fmt.Sprintf("media/%d/%s/original.%s", it.UserID, check, utils.ExtFromMime(it.MimeType))
+		keyOrig := fmt.Sprintf("media/%d/%s/original.%s", it.UserID, checksum, utils.ExtFromMime(it.MimeType))
 		origURL, err := s.store.Put(ctx, keyOrig, bytes.NewReader(oriented))
 		if err != nil {
 			s.log.ErrorContext(ctx, "failed to store original", "index", i, "key", keyOrig, "error", err)
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
 			continue
 		}
-		s.log.DebugContext(ctx, "original stored", "index", i, "url", origURL)
 
 		// Store thumb
-		keyThumb := fmt.Sprintf("media/%d/%s/thumb.jpg", it.UserID, check) // hardcoded by vips bimg.JPEG
+		keyThumb := fmt.Sprintf("media/%d/%s/thumb.jpg", it.UserID, checksum) // hardcoded by vips bimg.JPEG
 		thumbURL, err := s.store.Put(ctx, keyThumb, bytes.NewReader(thumb))
 		if err != nil {
 			s.log.ErrorContext(ctx, "failed to store thumbnail", "index", i, "key", keyThumb, "error", err)
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
 			continue
 		}
-		s.log.DebugContext(ctx, "thumbnail stored", "index", i, "url", thumbURL)
 
 		// Build domain model and persist in DB
 		m := &domain.Media{
@@ -161,7 +149,7 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 			ThumbURL:  thumbURL,
 			MimeType:  it.MimeType,
 			SizeBytes: int64(len(oriented)),
-			Checksum:  check,
+			Checksum:  checksum,
 			CreatedAt: s.clock().UTC(),
 			Metadata: domain.Metadata{
 				DateTimeOriginal: meta.DateTimeOriginal,
@@ -199,19 +187,20 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 		out = append(out, ucdto.UploadResult{Status: ucdto.StatusSaved, Media: m})
 	}
 
-	s.log.InfoContext(ctx, "upload batch completed", "total", len(items), "results", len(out))
+	s.log.InfoContext(ctx, "upload batch completed", "count", len(items), "saved", len(out))
 
 	return out, nil
 }
 
 func (s *mediaService) Delete(ctx context.Context, userID, id int64) error {
-	_, err := s.repo.Get(ctx, userID, id)
+	media, err := s.repo.Get(ctx, userID, id)
 	if err != nil {
 		return err
 	}
-	// TODO: delete from object storage
-	// _ = s.store.Delete(ctx, keyOrig)
-	// _ = s.store.Delete(ctx, keyThumb)
+
+	// TODO: handle delete
+	_ = s.store.Delete(ctx, media.URL)
+	_ = s.store.Delete(ctx, media.ThumbURL)
 
 	return s.repo.Delete(ctx, userID, id)
 }
