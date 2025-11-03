@@ -165,3 +165,21 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp)
 }
+
+func (h *ImageHandler) DeleteUserImage(c *gin.Context) {
+	log := h.logger.With("handler", "DeleteUserImage")
+	log.Info("received req")
+
+}
+
+func (h *ImageHandler) ListUserImages(c *gin.Context) {
+	log := h.logger.With("handler", "ListUserImages")
+	log.Info("received req")
+
+}
+
+func (h *ImageHandler) GetUserImage(c *gin.Context) {
+	log := h.logger.With("handler", "GetUserImage")
+	log.Info("received req")
+
+}
