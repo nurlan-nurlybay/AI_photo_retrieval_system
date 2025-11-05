@@ -50,6 +50,8 @@ type (
 )
 
 type mediaService struct {
+	vectorIndex VectorIndex
+
 	repo  domain.MediaRepository
 	store ObjectStorage
 	queue Queue // wraps Redis
@@ -60,6 +62,8 @@ type mediaService struct {
 }
 
 func NewMediaService(
+	milvus VectorIndex,
+
 	repo domain.MediaRepository,
 	store ObjectStorage,
 	queue Queue,
@@ -68,6 +72,8 @@ func NewMediaService(
 	log *logger.Logger,
 ) MediaService {
 	return &mediaService{
+		vectorIndex: milvus,
+
 		repo:  repo,
 		store: store,
 		queue: queue,
@@ -192,27 +198,32 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 	return out, nil
 }
 
-func (s *mediaService) Delete(ctx context.Context, userID, id int64) error {
-	media, err := s.repo.Get(ctx, userID, id)
+func (s *mediaService) Delete(ctx context.Context, userID, mediaID int64) error {
+	media, err := s.repo.Get(ctx, userID, mediaID)
 	if err != nil {
 		return err
 	}
 
-	// TODO: handle delete
+	// TODO: handle delete from milvus, pg, seaweedfs
+	_ = s.vectorIndex.Delete(ctx, mediaID)
+
 	_ = s.store.Delete(ctx, media.URL)
 	_ = s.store.Delete(ctx, media.ThumbURL)
 
-	return s.repo.Delete(ctx, userID, id)
+	_ = s.repo.Delete(ctx, userID, mediaID)
+
+	return nil
 }
 
-func (s *mediaService) GetByID(ctx context.Context, userID, id int64) (*domain.Media, error) {
-	m, err := s.repo.Get(ctx, userID, id)
+func (s *mediaService) GetByID(ctx context.Context, userID, mediaID int64) (*domain.Media, error) {
+	m, err := s.repo.Get(ctx, userID, mediaID)
 	if err != nil {
 		return nil, err
 	}
 	return m, nil
 }
 
+// TODO: add sort and filter by time/mimetype
 func (s *mediaService) List(
 	ctx context.Context,
 	f domain.MediaFilter,
@@ -225,6 +236,7 @@ func (s *mediaService) List(
 	if p.Offset < 0 {
 		p.Offset = 0
 	}
+
 	items, total, err := s.repo.List(ctx, f, p, so)
 	if err != nil {
 		return nil, 0, err

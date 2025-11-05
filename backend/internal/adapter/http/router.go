@@ -40,9 +40,9 @@ func SetupRoutes(searchSvc usecase.SearchService, uploadSvc usecase.MediaService
 	r.POST("/api/upload/image", imageUploadHandler.ImageUpload)
 
 	// User image manage
-	r.GET("/api/user/images", imageUploadHandler.ListUserImages)
-	r.DELETE("/api/user/images/:id", imageUploadHandler.DeleteUserImage)
-	r.GET("/api/user/images/:id", imageUploadHandler.GetUserImage)
+	r.GET("/api/user/images/list", imageUploadHandler.ListUserImages)
+	r.DELETE("/api/user/images/delete", imageUploadHandler.DeleteUserImage)
+	r.GET("/api/user/images/get", imageUploadHandler.GetUserImage)
 
 	// Helper routes
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

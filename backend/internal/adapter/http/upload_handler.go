@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	httpdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/http/dto"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
 	ucdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase/dto"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
@@ -104,11 +105,11 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 		Results: make([]httpdto.UploadResult, 0, len(results)),
 	}
 	for i, r := range results {
-		var ui *httpdto.UploadItem
+		var ui *httpdto.MediaItem
 
 		if r.Media != nil {
 			item := r.Media
-			ui = &httpdto.UploadItem{
+			ui = &httpdto.MediaItem{
 				ID:        item.ID,
 				URL:       item.URL,
 				ThumbURL:  item.ThumbURL,
@@ -170,16 +171,109 @@ func (h *ImageHandler) DeleteUserImage(c *gin.Context) {
 	log := h.logger.With("handler", "DeleteUserImage")
 	log.Info("received req")
 
+	var req httpdto.UserImageDeleteRequest
+	if !BindAndValidate(c, h.validator, &req) {
+		return
+	}
+
+	err := h.uploadUC.Delete(c.Request.Context(), req.UserID, req.ImageID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp := httpdto.UserImageDeleteResponse{
+		Deleted: true,
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *ImageHandler) ListUserImages(c *gin.Context) {
 	log := h.logger.With("handler", "ListUserImages")
 	log.Info("received req")
 
+	var req httpdto.UserImagesListRequest
+	if !BindAndValidate(c, h.validator, &req) {
+		return
+	}
+
+	filter := domain.MediaFilter{UserID: &req.UserID}
+	page := domain.Page{Limit: req.Limit, Offset: req.Offset}
+	sort := domain.Sort{}
+
+	media, total, err := h.uploadUC.List(c.Request.Context(), filter, page, sort)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	var resp httpdto.UserImagesListResponse
+	resp.Results = make([]httpdto.MediaItem, 0, len(media))
+
+	for _, m := range media {
+		var createdAt string
+		if !m.CreatedAt.IsZero() {
+			createdAt = m.CreatedAt.UTC().Format(time.RFC3339)
+		}
+		var takenAt string
+		if m.Metadata.DateTimeOriginal != nil {
+			takenAt = m.Metadata.DateTimeOriginal.UTC().Format(time.RFC3339)
+		}
+
+		resp.Results = append(resp.Results, httpdto.MediaItem{
+			ID:        m.ID,
+			URL:       m.URL,
+			ThumbURL:  m.ThumbURL,
+			MimeType:  m.MimeType,
+			SizeBytes: m.SizeBytes,
+			Width:     m.Metadata.Width,
+			Height:    m.Metadata.Height,
+			Checksum:  m.Checksum,
+			TakenAt:   takenAt,
+			CreatedAt: createdAt,
+		})
+	}
+	resp.Total = total
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *ImageHandler) GetUserImage(c *gin.Context) {
 	log := h.logger.With("handler", "GetUserImage")
 	log.Info("received req")
 
+	var req httpdto.UserImageGetRequest
+	if !BindAndValidate(c, h.validator, &req) {
+		return
+	}
+
+	m, err := h.uploadUC.GetByID(c.Request.Context(), req.UserID, req.ImageID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	var createdAt string
+	if !m.CreatedAt.IsZero() {
+		createdAt = m.CreatedAt.UTC().Format(time.RFC3339)
+	}
+	var takenAt string
+	if m.Metadata.DateTimeOriginal != nil {
+		takenAt = m.Metadata.DateTimeOriginal.UTC().Format(time.RFC3339)
+	}
+	resp := httpdto.MediaItem{
+		ID:        m.ID,
+		URL:       m.URL,
+		ThumbURL:  m.ThumbURL,
+		MimeType:  m.MimeType,
+		SizeBytes: m.SizeBytes,
+		Width:     m.Metadata.Width,
+		Height:    m.Metadata.Height,
+		Checksum:  m.Checksum,
+		TakenAt:   takenAt,
+		CreatedAt: createdAt,
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
