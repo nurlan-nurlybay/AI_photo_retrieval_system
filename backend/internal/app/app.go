@@ -89,7 +89,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 
 	// Setup app services
 	searchSvc := usecase.NewSearchService(mediaRepo, clipClient, faissClient, log)
-	mediaSvc := usecase.NewMediaService(mediaRepo, store, redisClient, imgProc, metaExt, log)
+	mediaSvc := usecase.NewMediaService(faissClient, mediaRepo, store, redisClient, imgProc, metaExt, log)
 
 	// Setup workers
 	ew := &worker.EmbedWorker{

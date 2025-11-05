@@ -27,20 +27,31 @@ type Metadata struct {
 	Software         string
 }
 
+// Return response
+type MediaWithScore struct {
+	Media *Media
+	Score float32
+}
+
 // Query helpers
 type MediaFilter struct {
-	UserID   *string
+	UserID   *int64
 	After    *time.Time
 	Before   *time.Time
 	MimeLike []string
 }
 
-type Page struct{ Limit, Offset int }
+type Page struct {
+	Limit  int
+	Offset int
+}
+
 type Sort struct {
 	Field string
 	Desc  bool
 }
 
+// Repo layer contract
 type MediaRepository interface {
 	Create(ctx context.Context, m *Media) (int64, error)
 	Delete(ctx context.Context, uID, mID int64) error
@@ -49,9 +60,4 @@ type MediaRepository interface {
 
 	// dedup helper
 	GetByChecksum(ctx context.Context, uID int64, checksum string) (*Media, error)
-}
-
-type MediaWithScore struct {
-	Media *Media
-	Score float32
 }

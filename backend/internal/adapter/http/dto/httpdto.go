@@ -9,8 +9,8 @@ type SearchTextRequest struct {
 }
 
 type SearchImageRequest struct {
-    UserID int64                 `form:"user_id" binding:"required"`
-    File   *multipart.FileHeader `form:"file"    binding:"required"`
+	UserID int64                 `form:"user_id" binding:"required"`
+	File   *multipart.FileHeader `form:"file"    binding:"required"`
 }
 
 type SearchResponse struct {
@@ -43,13 +43,40 @@ type UploadResponse struct {
 }
 
 type UploadResult struct {
-	Filename string      `json:"filename"`
-	Status   string      `json:"status"`          // "saved" | "duplicate" | "failed" | "skipped"
-	Error    string      `json:"error,omitempty"` // present if Status == "failed"
-	Media    *UploadItem `json:"media,omitempty"` // present if saved or duplicate
+	Filename string     `json:"filename"`
+	Status   string     `json:"status"`          // "saved" | "duplicate" | "failed" | "skipped"
+	Error    string     `json:"error,omitempty"` // present if Status == "failed"
+	Media    *MediaItem `json:"media,omitempty"` // present if saved or duplicate
 }
 
-type UploadItem struct {
+// ===== User Images =====
+type UserImagesListRequest struct {
+	UserID int64 `json:"user_id" binding:"required"`
+	Limit  int   `json:"limit,omitempty"`
+	Offset int   `json:"offset,omitempty"`
+}
+
+type UserImagesListResponse struct {
+	Results []MediaItem `json:"results"`
+	Total   int         `json:"total"`
+}
+
+type UserImageGetRequest struct {
+	UserID  int64 `json:"user_id" binding:"required"`
+	ImageID int64 `json:"image_id" binding:"required"`
+}
+
+type UserImageDeleteRequest struct {
+	UserID  int64 `json:"user_id" binding:"required"`
+	ImageID int64 `json:"image_id" binding:"required"`
+}
+
+type UserImageDeleteResponse struct {
+	Deleted bool `json:"deleted"`
+}
+
+// GENERIC RESPONSE 
+type MediaItem struct {
 	ID        int64  `json:"id"`
 	URL       string `json:"url"`
 	ThumbURL  string `json:"thumb_url"`
