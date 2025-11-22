@@ -1,4 +1,4 @@
-import 'models.dart';
+import 'package:frontend_flutter/data/models.dart';
 
 class Relevance {
   /// Keep items whose score is at least (alpha * maxScore).

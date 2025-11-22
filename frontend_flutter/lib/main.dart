@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'ui/screens/main_screen.dart';
+import 'ui/screens/home_screen.dart';
 
 void main() {
-  runApp(const PhotoApp());
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: HomeScreen(),
+  ));
 }
 
 class PhotoApp extends StatelessWidget {
@@ -26,35 +30,34 @@ class PhotoApp extends StatelessWidget {
     );
 
     return MaterialApp(
-      title: 'Photo Retrieval MVP',
+      title: 'Photo Retrieval',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: colorScheme,
         useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        colorScheme: const ColorScheme.dark(
+          primary: Colors.white,
+          onPrimary: Colors.black,
+          secondary: Color(0xFFD4D4D4),
+          onSecondary: Colors.black,
+          surface: Color(0xFF1E1E1E),
+          onSurface: Colors.white,
+          background: Color(0xFF121212),
+          onBackground: Colors.white,
+        ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          elevation: 0.5,
+          backgroundColor: Color(0xFF121212),
+          foregroundColor: Colors.white,
+          elevation: 0,
         ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.black,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
+        iconTheme: const IconThemeData(color: Colors.white),
+        textTheme: const TextTheme(
+          bodyMedium: TextStyle(color: Colors.white),
+          bodyLarge: TextStyle(color: Colors.white),
         ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.black,
-            side: const BorderSide(color: Colors.black87, width: 1),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        ),
-        inputDecorationTheme: const InputDecorationTheme(
-          hintStyle: TextStyle(color: Colors.black54),
-        ),
-        progressIndicatorTheme: const ProgressIndicatorThemeData(color: Colors.black),
       ),
-      home: const MainScreen(),
+      home: const HomeScreen(),
     );
   }
 }

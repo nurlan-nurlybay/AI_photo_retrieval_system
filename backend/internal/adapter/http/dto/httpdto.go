@@ -51,9 +51,9 @@ type UploadResult struct {
 
 // ===== User Images =====
 type UserImagesListRequest struct {
-	UserID int64 `json:"user_id" binding:"required"`
-	Limit  int   `json:"limit,omitempty"`
-	Offset int   `json:"offset,omitempty"`
+	UserID int64 `form:"user_id" binding:"required"`
+	Limit  int   `form:"limit,omitempty"`
+	Offset int   `form:"offset,omitempty"`
 }
 
 type UserImagesListResponse struct {
