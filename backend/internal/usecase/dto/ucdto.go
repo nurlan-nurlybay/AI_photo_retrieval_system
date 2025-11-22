@@ -15,11 +15,12 @@ const (
 )
 
 type UploadInput struct {
-	UserID   int64
-	Filename string
-	MimeType string
-	Size     int64
-	Body     io.ReadSeeker
+	UserID    int64
+	Filename  string
+	MimeType  string
+	Size      int64
+	Body      io.ReadSeeker
+	LocalPath string
 }
 
 type UploadResult struct {

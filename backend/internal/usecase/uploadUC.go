@@ -157,6 +157,7 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 			SizeBytes: int64(len(oriented)),
 			Checksum:  checksum,
 			CreatedAt: s.clock().UTC(),
+			LocalPath: it.LocalPath,
 			Metadata: domain.Metadata{
 				DateTimeOriginal: meta.DateTimeOriginal,
 				Orientation:      meta.Orientation,

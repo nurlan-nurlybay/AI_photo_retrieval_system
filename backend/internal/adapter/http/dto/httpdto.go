@@ -19,17 +19,19 @@ type SearchResponse struct {
 }
 
 type MediaResponse struct {
-	ID       int64   `json:"id"`
-	UserID   int64   `json:"user_id"`
-	URL      string  `json:"url"`
-	ThumbURL string  `json:"thumb_url"`
-	Score    float32 `json:"score,omitempty"`
+	ID        int64   `json:"id"`
+	UserID    int64   `json:"user_id"`
+	URL       string  `json:"url"`
+	ThumbURL  string  `json:"thumb_url"`
+	Score     float32 `json:"score,omitempty"`
+	LocalPath string  `json:"local_path,omitempty"`
 }
 
 // ===== Upload Image =====
 type UploadRequest struct {
-	Files []*multipart.FileHeader `form:"files[]" binding:"required,min=1,max=100"`
-	Dedup bool                    `form:"dedup,default=true"`
+	Files      []*multipart.FileHeader `form:"files[]" binding:"required,min=1,max=100"`
+	Dedup      bool                    `form:"dedup,default=true"`
+	LocalPaths []string                `form:"local_paths[]"`
 }
 
 type UploadResponse struct {
@@ -75,7 +77,7 @@ type UserImageDeleteResponse struct {
 	Deleted bool `json:"deleted"`
 }
 
-// GENERIC RESPONSE 
+// GENERIC RESPONSE
 type MediaItem struct {
 	ID        int64  `json:"id"`
 	URL       string `json:"url"`
@@ -87,4 +89,5 @@ type MediaItem struct {
 	Checksum  string `json:"checksum"`
 	TakenAt   string `json:"taken_at,omitempty"` // RFC3339, empty if unknown
 	CreatedAt string `json:"created_at"`         // RFC3339
+	LocalPath string `json:"local_path,omitempty"`
 }

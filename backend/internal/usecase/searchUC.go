@@ -70,7 +70,7 @@ func (s *searchService) SearchByText(ctx context.Context, userID int64, text str
 		})
 	}
 
-	s.log.InfoContext(ctx, "search by text", "result:", results)
+	s.log.InfoContext(ctx, "search by text", "results", results)
 
 	return out, nil
 }
@@ -99,7 +99,7 @@ func (s *searchService) SearchByImage(ctx context.Context, userID int64, img []b
 		})
 	}
 
-	s.log.InfoContext(ctx, "search by image", "result:", results)
+	s.log.InfoContext(ctx, "search by image", "results", results)
 
 	return out, nil
 }

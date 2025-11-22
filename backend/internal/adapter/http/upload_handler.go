@@ -69,9 +69,8 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 
 	// Map http to usecase inputs
 	inputs := make([]ucdto.UploadInput, 0, len(req.Files))
-	for _, fh := range req.Files {
-		// read into memory
-		// TODO: switch to streaming/tempfile
+	for i, fh := range req.Files {
+		// read file
 		f, err := fh.Open()
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot open file " + fh.Filename})
@@ -85,12 +84,20 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 		}
 
 		mt := fh.Header.Get("Content-Type")
+
+		// get local path — safe even if array missing/short
+		var lp string
+		if i < len(req.LocalPaths) {
+			lp = req.LocalPaths[i]
+		}
+
 		inputs = append(inputs, ucdto.UploadInput{
-			UserID:   userID,
-			Filename: fh.Filename,
-			MimeType: mt,
-			Size:     int64(len(b)),
-			Body:     bytes.NewReader(b), // io.ReadSeeker
+			UserID:    userID,
+			Filename:  fh.Filename,
+			MimeType:  mt,
+			Size:      int64(len(b)),
+			Body:      bytes.NewReader(b),
+			LocalPath: lp,
 		})
 	}
 

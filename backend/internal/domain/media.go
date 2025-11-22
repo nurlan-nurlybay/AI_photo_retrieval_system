@@ -14,6 +14,7 @@ type Media struct {
 	SizeBytes int64
 	Checksum  string // e.g. SHA256 for dedup
 	CreatedAt time.Time
+	LocalPath string
 	Metadata  Metadata
 }
 
