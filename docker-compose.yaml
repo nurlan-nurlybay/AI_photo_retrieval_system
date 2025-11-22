@@ -39,6 +39,7 @@ services:
     image: chrislusf/seaweedfs:latest
     container_name: seaweedfs
     command: "server -dir=/data -volume.max=10 -filer -s3"
+    user: "0:0"
     ports:
       - "9333:9333"   # master 
       - "8888:8888"   # filer (HTTP file API) 

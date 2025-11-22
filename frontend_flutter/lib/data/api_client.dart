@@ -34,7 +34,21 @@ class ApiClient {
         defaultHeaders = defaultHeaders ?? const {};
 
   /// Clean up sockets if you ever need to dispose the client.
+  /// Clean up sockets if you ever need to dispose the client.
   void close() => _client.close();
+
+  /// HEALTH CHECK
+  /// GET /healthz
+  /// Returns true if 200 OK
+  Future<bool> checkHealth() async {
+    try {
+      final uri = Uri.parse(AppConfig.healthEndpoint);
+      final resp = await _client.get(uri).timeout(const Duration(seconds: 5));
+      return resp.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
 
   /// TEXT SEARCH
   /// POST { "user_id": int, "q": "..." } to /api/search/text
@@ -105,5 +119,44 @@ Future<SearchResponse> imageSearch(File probeImage) async {
     final streamed = await req.send().timeout(const Duration(minutes: 2));
     final resp = await http.Response.fromStream(streamed);
     return UploadResponseModel.fromJson(resp.requireOkJson());
+  }
+
+    /// ====== USER IMAGES LIST (for Home gallery) ======
+  ///
+  /// type UserImagesListRequest struct {
+  ///   UserID int64 `json:"user_id" binding:"required"`
+  ///   Limit  int   `json:"limit,omitempty"`
+  ///   Offset int   `json:"offset,omitempty"`
+  /// }
+  ///
+  /// type UserImagesListResponse struct {
+  ///   Results []MediaItem `json:"results"`
+  ///   Total   int         `json:"total"`
+  /// }
+  static Future<List<MediaItem>> listUserImages({
+    required int userId,
+    int limit = 100,
+    int offset = 0,
+  }) async {
+    // Use GET with query parameters
+    final uri = Uri.parse('${AppConfig.baseUrl}/api/user/images/list').replace(
+      queryParameters: {
+        'user_id': userId.toString(),
+        'limit': limit.toString(),
+        'offset': offset.toString(),
+      },
+    );
+
+    final response = await http.get(uri);
+
+        if (response.statusCode != 200) {
+      throw Exception(
+        'List images failed: ${response.statusCode} - ${response.body}',
+      );
+    }
+
+    final jsonData = jsonDecode(response.body);
+    final listResponse = UserImagesListResponse.fromJson(jsonData);
+    return listResponse.results;
   }
 }

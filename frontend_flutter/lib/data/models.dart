@@ -1,9 +1,12 @@
+// lib/data/models.dart
+
+/// Single search hit when doing text/image search.
 class MediaResponse {
   final int id;
   final int userId;
   final String url;
   final String thumbUrl;
-  final double? score; // optional
+  final double? score;
 
   MediaResponse({
     required this.id,
@@ -15,33 +18,38 @@ class MediaResponse {
 
   factory MediaResponse.fromJson(Map<String, dynamic> json) {
     return MediaResponse(
-      id: (json['id'] as num).toInt(),
-      userId: (json['user_id'] as num).toInt(),
+      id: json['id'] as int,
+      userId: json['user_id'] as int,
       url: json['url'] as String,
       thumbUrl: json['thumb_url'] as String,
-      score: json['score'] == null ? null : (json['score'] as num).toDouble(),
+      score: (json['score'] as num?)?.toDouble(),
     );
   }
 }
 
+/// Response for /api/search/text and /api/search/image
 class SearchResponse {
   final List<MediaResponse> results;
   final int total;
 
-  SearchResponse({required this.results, required this.total});
+  SearchResponse({
+    required this.results,
+    required this.total,
+  });
 
   factory SearchResponse.fromJson(Map<String, dynamic> json) {
-    final list = (json['results'] as List? ?? []);
+    final list = (json['results'] as List<dynamic>? ?? [])
+        .map((e) => MediaResponse.fromJson(e as Map<String, dynamic>))
+        .toList();
     return SearchResponse(
-      results: list
-          .map((e) => MediaResponse.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      total: (json['total'] as num? ?? 0).toInt(),
+      results: list,
+      total: json['total'] as int? ?? list.length,
     );
   }
 }
 
-class UploadItem {
+/// Full stored media item (used for user gallery, upload results, etc.)
+class MediaItem {
   final int id;
   final String url;
   final String thumbUrl;
@@ -50,10 +58,10 @@ class UploadItem {
   final int width;
   final int height;
   final String checksum;
-  final String? takenAt;   // RFC3339 or null
-  final String createdAt;  // RFC3339
+  final String? takenAt;
+  final String createdAt;
 
-  UploadItem({
+  MediaItem({
     required this.id,
     required this.url,
     required this.thumbUrl,
@@ -62,52 +70,53 @@ class UploadItem {
     required this.width,
     required this.height,
     required this.checksum,
-    required this.takenAt,
     required this.createdAt,
+    this.takenAt,
   });
 
-  factory UploadItem.fromJson(Map<String, dynamic> json) {
-    final t = json['taken_at'] as String?;
-    return UploadItem(
-      id: (json['id'] as num).toInt(),
+  factory MediaItem.fromJson(Map<String, dynamic> json) {
+    return MediaItem(
+      id: json['id'] as int,
       url: json['url'] as String,
       thumbUrl: json['thumb_url'] as String,
       mimeType: json['mime_type'] as String,
-      sizeBytes: (json['size_bytes'] as num).toInt(),
-      width: (json['width'] as num).toInt(),
-      height: (json['height'] as num).toInt(),
+      sizeBytes: json['size_bytes'] as int,
+      width: json['width'] as int,
+      height: json['height'] as int,
       checksum: json['checksum'] as String,
-      takenAt: (t == null || t.isEmpty) ? null : t,
+      takenAt: json['taken_at'] as String?,
       createdAt: json['created_at'] as String,
     );
   }
 }
 
-class UploadResult {
+/// One entry in UploadResponse.results
+class UploadResultModel {
   final String filename;
-  final String status;
+  final String status; // "saved" | "duplicate" | "failed" | "skipped"
   final String? error;
-  final UploadItem? media;
+  final MediaItem? media;
 
-  UploadResult({
+  UploadResultModel({
     required this.filename,
     required this.status,
     this.error,
     this.media,
   });
 
-  factory UploadResult.fromJson(Map<String, dynamic> json) {
-    return UploadResult(
+  factory UploadResultModel.fromJson(Map<String, dynamic> json) {
+    return UploadResultModel(
       filename: json['filename'] as String,
       status: json['status'] as String,
       error: json['error'] as String?,
-      media: json['media'] == null
-          ? null
-          : UploadItem.fromJson(json['media'] as Map<String, dynamic>),
+      media: json['media'] != null
+          ? MediaItem.fromJson(json['media'] as Map<String, dynamic>)
+          : null,
     );
   }
 }
 
+/// Summary block inside UploadResponse
 class UploadSummary {
   final int total;
   final int saved;
@@ -123,27 +132,54 @@ class UploadSummary {
 
   factory UploadSummary.fromJson(Map<String, dynamic> json) {
     return UploadSummary(
-      total: (json['total'] as num).toInt(),
-      saved: (json['saved'] as num).toInt(),
-      duplicates: (json['duplicates'] as num).toInt(),
-      failed: (json['failed'] as num).toInt(),
+      total: json['total'] as int? ?? 0,
+      saved: json['saved'] as int? ?? 0,
+      duplicates: json['duplicates'] as int? ?? 0,
+      failed: json['failed'] as int? ?? 0,
     );
   }
 }
 
+/// Upload response from /api/upload/image
 class UploadResponseModel {
-  final List<UploadResult> results;
+  final List<UploadResultModel> results;
   final UploadSummary summary;
 
-  UploadResponseModel({required this.results, required this.summary});
+  UploadResponseModel({
+    required this.results,
+    required this.summary,
+  });
 
   factory UploadResponseModel.fromJson(Map<String, dynamic> json) {
-    final list = (json['results'] as List? ?? []);
+    final list = (json['results'] as List<dynamic>? ?? [])
+        .map((e) => UploadResultModel.fromJson(e as Map<String, dynamic>))
+        .toList();
     return UploadResponseModel(
-      results: list
-          .map((e) => UploadResult.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      summary: UploadSummary.fromJson(json['summary'] as Map<String, dynamic>),
+      results: list,
+      summary: UploadSummary.fromJson(
+        json['summary'] as Map<String, dynamic>? ?? const {},
+      ),
+    );
+  }
+}
+
+/// Response for /api/user/images/list
+class UserImagesListResponse {
+  final List<MediaItem> results;
+  final int total;
+
+  UserImagesListResponse({
+    required this.results,
+    required this.total,
+  });
+
+  factory UserImagesListResponse.fromJson(Map<String, dynamic> json) {
+    final list = (json['results'] as List<dynamic>? ?? [])
+        .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+    return UserImagesListResponse(
+      results: list,
+      total: json['total'] as int? ?? list.length,
     );
   }
 }
