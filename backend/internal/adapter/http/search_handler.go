@@ -45,11 +45,12 @@ func (h *SearchHandler) SearchByText(c *gin.Context) {
 			continue
 		}
 		resp.Results = append(resp.Results, httpdto.MediaResponse{
-			ID:       r.Media.ID,
-			UserID:   r.Media.UserID,
-			URL:      r.Media.URL,
-			ThumbURL: r.Media.ThumbURL,
-			Score:    r.Score,
+			ID:        r.Media.ID,
+			UserID:    r.Media.UserID,
+			URL:       r.Media.URL,
+			ThumbURL:  r.Media.ThumbURL,
+			Score:     r.Score,
+			LocalPath: r.Media.LocalPath,
 		})
 	}
 	resp.Total = len(resp.Results)
@@ -94,11 +95,12 @@ func (h *SearchHandler) SearchByImage(c *gin.Context) {
 			continue
 		}
 		resp.Results = append(resp.Results, httpdto.MediaResponse{
-			ID:       r.Media.ID,
-			UserID:   r.Media.UserID,
-			URL:      r.Media.URL,
-			ThumbURL: r.Media.ThumbURL,
-			Score:    r.Score,
+			ID:        r.Media.ID,
+			UserID:    r.Media.UserID,
+			URL:       r.Media.URL,
+			ThumbURL:  r.Media.ThumbURL,
+			Score:     r.Score,
+			LocalPath: r.Media.LocalPath,
 		})
 	}
 	resp.Total = len(resp.Results)

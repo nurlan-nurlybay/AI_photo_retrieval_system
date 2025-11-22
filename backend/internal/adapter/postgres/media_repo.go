@@ -30,6 +30,7 @@ const (
 	SoftwareCol  = "software"
 	OrientCol    = "orientation"
 	CreatedAtCol = "created_at"
+	LocalPathCol = "local_path"
 )
 
 var _ domain.MediaRepository = (*MediaRepo)(nil)
@@ -53,14 +54,14 @@ func (r *MediaRepo) Create(ctx context.Context, m *domain.Media) (int64, error) 
 		Columns(
 			UserIDCol, URLCol, ThumbURLCol, MimeTypeCol, SizeBytesCol,
 			ChecksumCol, CreatedAtCol, TakenAtCol, WidthCol, HeightCol,
-			MakeCol, ModelCol, SoftwareCol, OrientCol,
+			MakeCol, ModelCol, SoftwareCol, OrientCol, LocalPathCol,
 		).
 		Values(
 			m.UserID, m.URL, m.ThumbURL, m.MimeType, m.SizeBytes,
 			m.Checksum, m.CreatedAt, m.Metadata.DateTimeOriginal,
 			m.Metadata.Width, m.Metadata.Height,
 			m.Metadata.CameraMake, m.Metadata.CameraModel,
-			m.Metadata.Software, m.Metadata.Orientation,
+			m.Metadata.Software, m.Metadata.Orientation, m.LocalPath,
 		).
 		Suffix("RETURNING id").
 		PlaceholderFormat(squirrel.Dollar).
@@ -95,7 +96,7 @@ func (r *MediaRepo) Get(ctx context.Context, userID, mediaID int64) (*domain.Med
 		Select(
 			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol, SizeBytesCol,
 			ChecksumCol, CreatedAtCol, TakenAtCol, OrientCol, WidthCol, HeightCol,
-			MakeCol, ModelCol, SoftwareCol,
+			MakeCol, ModelCol, SoftwareCol, LocalPathCol,
 		).
 		From(TableName).
 		Where(squirrel.Eq{IDCol: mediaID, UserIDCol: userID}).
@@ -119,6 +120,7 @@ func (r *MediaRepo) Get(ctx context.Context, userID, mediaID int64) (*domain.Med
 		&m.ID, &m.UserID, &m.URL, &m.ThumbURL, &m.MimeType, &m.SizeBytes,
 		&m.Checksum, &m.CreatedAt, &meta.DateTimeOriginal, &meta.Orientation,
 		&meta.Width, &meta.Height, &meta.CameraMake, &meta.CameraModel, &meta.Software,
+		&m.LocalPath,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -137,7 +139,7 @@ func (r *MediaRepo) GetByChecksum(ctx context.Context, userID int64, checksum st
 		Select(
 			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol, SizeBytesCol,
 			ChecksumCol, CreatedAtCol, TakenAtCol, WidthCol, HeightCol,
-			MakeCol, ModelCol, SoftwareCol, OrientCol,
+			MakeCol, ModelCol, SoftwareCol, OrientCol, LocalPathCol,
 		).
 		From(TableName).
 		Where(squirrel.Eq{UserIDCol: userID, ChecksumCol: checksum}).
@@ -161,7 +163,7 @@ func (r *MediaRepo) GetByChecksum(ctx context.Context, userID int64, checksum st
 		&m.ID, &m.UserID, &m.URL, &m.ThumbURL, &m.MimeType, &m.SizeBytes,
 		&m.Checksum, &m.CreatedAt, &meta.DateTimeOriginal, &meta.Width,
 		&meta.Height, &meta.CameraMake, &meta.CameraModel, &meta.Software,
-		&meta.Orientation,
+		&meta.Orientation, &m.LocalPath,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -180,7 +182,8 @@ func (r *MediaRepo) List(ctx context.Context, f domain.MediaFilter, p domain.Pag
 		Select(
 			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol,
 			SizeBytesCol, ChecksumCol, CreatedAtCol, TakenAtCol,
-			WidthCol, HeightCol, MakeCol, ModelCol, SoftwareCol, OrientCol,
+			WidthCol, HeightCol, MakeCol, ModelCol, SoftwareCol,
+			OrientCol, LocalPathCol,
 		).
 		From(TableName).
 		PlaceholderFormat(squirrel.Dollar)
@@ -251,7 +254,8 @@ func (r *MediaRepo) List(ctx context.Context, f domain.MediaFilter, p domain.Pag
 			&m.ID, &m.UserID, &m.URL, &m.ThumbURL, &m.MimeType,
 			&m.SizeBytes, &m.Checksum, &m.CreatedAt,
 			&meta.DateTimeOriginal, &meta.Width, &meta.Height,
-			&meta.CameraMake, &meta.CameraModel, &meta.Software, &meta.Orientation,
+			&meta.CameraMake, &meta.CameraModel, &meta.Software,
+			&meta.Orientation, &m.LocalPath,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan media: %w", err)
 		}
