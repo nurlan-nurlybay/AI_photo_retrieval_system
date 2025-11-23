@@ -1,15 +1,15 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:frontend_flutter/data/models.dart';
-import 'package:frontend_flutter/data/api_client.dart';
 import 'package:frontend_flutter/core/config.dart';
+import 'package:frontend_flutter/ui/widgets/cached_image.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 class DetailScreen extends StatelessWidget {
   final String imageUrl;
-  final MediaItem? mediaItem; // Optional, for metadata
-  final Function(File) onFindSimilar; // Callback to trigger search
+  final MediaItem? mediaItem;
+  final Function(File) onFindSimilar;
 
   const DetailScreen({
     super.key,
@@ -40,8 +40,9 @@ class DetailScreen extends StatelessWidget {
             child: Center(
               child: Hero(
                 tag: imageUrl,
-                child: Image.network(
-                  AppConfig.fixImageUrl(imageUrl),
+                child: CachedImage(
+                  localPath: mediaItem?.localPath,
+                  remoteUrl: imageUrl,
                   fit: BoxFit.contain,
                   loadingBuilder: (context, child, progress) {
                     if (progress == null) return child;
@@ -154,9 +155,6 @@ class DetailScreen extends StatelessWidget {
   }
 
   Future<void> _handleFindSimilar(BuildContext context) async {
-    // 1. Download the image to a temporary file
-    // 2. Call the callback with the file
-    
     try {
       // Show loading indicator
       showDialog(
@@ -165,15 +163,21 @@ class DetailScreen extends StatelessWidget {
         builder: (ctx) => const Center(child: CircularProgressIndicator()),
       );
 
-      final response = await http.get(Uri.parse(imageUrl));
-      final tempDir = await getTemporaryDirectory();
-      final tempFile = File('${tempDir.path}/temp_search_image.jpg');
-      await tempFile.writeAsBytes(response.bodyBytes);
+      // Use local file if available, otherwise download
+      File searchFile;
+      if (mediaItem?.localPath != null && File(mediaItem!.localPath!).existsSync()) {
+        searchFile = File(mediaItem!.localPath!);
+      } else {
+        final response = await http.get(Uri.parse(AppConfig.fixImageUrl(imageUrl)));
+        final tempDir = await getTemporaryDirectory();
+        searchFile = File('${tempDir.path}/temp_search_image.jpg');
+        await searchFile.writeAsBytes(response.bodyBytes);
+      }
 
       if (context.mounted) {
         Navigator.pop(context); // Dismiss loading
         Navigator.pop(context); // Close detail screen
-        onFindSimilar(tempFile); // Trigger search on Home
+        onFindSimilar(searchFile); // Trigger search on Home
       }
     } catch (e) {
       if (context.mounted) {

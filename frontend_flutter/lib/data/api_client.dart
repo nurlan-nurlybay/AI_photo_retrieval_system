@@ -102,6 +102,7 @@ Future<SearchResponse> imageSearch(File probeImage) async {
   /// Returns UploadResponseModel { results:[...], summary:{...} }
   Future<UploadResponseModel> uploadImages({
     required List<File> files,
+    required List<String> localPaths,
     bool dedup = true,
   }) async {
     if (files.isEmpty) {
@@ -114,6 +115,12 @@ Future<SearchResponse> imageSearch(File probeImage) async {
 
     for (final f in files) {
       req.files.add(await http.MultipartFile.fromPath('files[]', f.path));
+    }
+
+    for (final path in localPaths) {
+      // Use MultipartFile.fromString to send multiple values for the same key (array)
+      // req.fields is a Map and overwrites duplicate keys.
+      req.files.add(http.MultipartFile.fromString('local_paths[]', path));
     }
 
     final streamed = await req.send().timeout(const Duration(minutes: 2));

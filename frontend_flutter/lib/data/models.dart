@@ -7,6 +7,7 @@ class MediaResponse {
   final String url;
   final String thumbUrl;
   final double? score;
+  final String? localPath;
 
   MediaResponse({
     required this.id,
@@ -14,6 +15,7 @@ class MediaResponse {
     required this.url,
     required this.thumbUrl,
     this.score,
+    this.localPath,
   });
 
   factory MediaResponse.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class MediaResponse {
       url: json['url'] as String,
       thumbUrl: json['thumb_url'] as String,
       score: (json['score'] as num?)?.toDouble(),
+      localPath: json['local_path'] as String?,
     );
   }
 }
@@ -60,6 +63,7 @@ class MediaItem {
   final String checksum;
   final String? takenAt;
   final String createdAt;
+  final String? localPath;
 
   MediaItem({
     required this.id,
@@ -72,6 +76,7 @@ class MediaItem {
     required this.checksum,
     required this.createdAt,
     this.takenAt,
+    this.localPath,
   });
 
   factory MediaItem.fromJson(Map<String, dynamic> json) {
@@ -86,8 +91,23 @@ class MediaItem {
       checksum: json['checksum'] as String,
       takenAt: json['taken_at'] as String?,
       createdAt: json['created_at'] as String,
+      localPath: json['local_path'] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'url': url,
+        'thumb_url': thumbUrl,
+        'mime_type': mimeType,
+        'size_bytes': sizeBytes,
+        'width': width,
+        'height': height,
+        'checksum': checksum,
+        'taken_at': takenAt,
+        'created_at': createdAt,
+        'local_path': localPath,
+      };
 }
 
 /// One entry in UploadResponse.results

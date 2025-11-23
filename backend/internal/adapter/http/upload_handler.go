@@ -239,6 +239,7 @@ func (h *ImageHandler) ListUserImages(c *gin.Context) {
 			Checksum:  m.Checksum,
 			TakenAt:   takenAt,
 			CreatedAt: createdAt,
+			LocalPath: m.LocalPath,
 		})
 	}
 	resp.Total = total
@@ -280,6 +281,7 @@ func (h *ImageHandler) GetUserImage(c *gin.Context) {
 		Checksum:  m.Checksum,
 		TakenAt:   takenAt,
 		CreatedAt: createdAt,
+		LocalPath: m.LocalPath,
 	}
 
 	c.JSON(http.StatusOK, resp)
