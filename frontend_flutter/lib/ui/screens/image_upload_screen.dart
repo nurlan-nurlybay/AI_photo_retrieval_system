@@ -49,7 +49,8 @@ Future<void> _pickImages() async {
     }
     setState(() => _busy = true);
     try {
-      final resp = await _api.uploadImages(files: _picked, dedup: true);
+      final localPaths = _picked.map((f) => f.path).toList();
+      final resp = await _api.uploadImages(files: _picked, localPaths: localPaths, dedup: true);
       setState(() => _last = resp);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Saved: ${resp.summary.saved}, Duplicates: ${resp.summary.duplicates}, Failed: ${resp.summary.failed}')),

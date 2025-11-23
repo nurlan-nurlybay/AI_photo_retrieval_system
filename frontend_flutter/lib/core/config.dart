@@ -36,7 +36,7 @@ class AppConfig {
   static String fixImageUrl(String url) {
     if (Platform.isAndroid && url.contains('localhost:8333')) {
       // Use WSL IP directly (update this if your WSL IP changes)
-      return url.replaceFirst('localhost:8333', '192.168.0.160:8333');
+      return url.replaceFirst('localhost:8333', '172.16.0.2:8333');
     }
     return url;
   }

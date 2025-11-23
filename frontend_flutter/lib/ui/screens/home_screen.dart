@@ -8,6 +8,7 @@ import 'package:frontend_flutter/data/api_client.dart';
 import 'package:frontend_flutter/core/config.dart';
 import 'package:frontend_flutter/data/models.dart';
 import 'package:frontend_flutter/ui/screens/detail_screen.dart';
+import 'package:frontend_flutter/ui/widgets/cached_image.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -97,6 +98,16 @@ class _HomeScreenState extends State<HomeScreen> {
       _loadAllImages();
       return;
     }
+    
+    // If query is too short (backend requires min 2 chars), show blank screen
+    if (trimmed.length < 2) {
+      setState(() {
+        _mediaItems = [];
+        _error = null;
+        _isSearchMode = true;
+      });
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -106,19 +117,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final SearchResponse resp = await _api.textSearch(trimmed);
+      final filtered = _filterResults(resp.results);
 
       setState(() {
-        // Convert MediaResponse to MediaItem for consistency
-        _mediaItems = resp.results.map((r) => MediaItem(
+        _mediaItems = filtered.map((r) => MediaItem(
           id: r.id,
           url: r.url,
           thumbUrl: r.thumbUrl,
-          mimeType: 'image/jpeg', // Placeholder
-          sizeBytes: 0, // Placeholder
-          width: 0, // Placeholder
-          height: 0, // Placeholder
-          checksum: '', // Placeholder
-          createdAt: 'Unknown', // Placeholder
+          mimeType: 'image/jpeg',
+          sizeBytes: 0,
+          width: 0,
+          height: 0,
+          checksum: '',
+          createdAt: 'Unknown',
+          localPath: r.localPath,
         )).toList();
         _isBackendOnline = true;
       });
@@ -149,14 +161,25 @@ class _HomeScreenState extends State<HomeScreen> {
       _isLoading = true;
       _error = null;
       _isSearchMode = true;
-      _searchController.text = "Searching by image...";
+      // _searchController.text = "Searching by image..."; // Removed as per request
     });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Searching by image...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
 
     try {
       final SearchResponse resp = await _api.imageSearch(file);
+      // Use a slightly more lenient threshold for image search (0.15) vs text search (0.12)
+      final filtered = _filterResults(resp.results, threshold: 0.25);
 
       setState(() {
-        _mediaItems = resp.results.map((r) => MediaItem(
+        _mediaItems = filtered.map((r) => MediaItem(
           id: r.id,
           url: r.url,
           thumbUrl: r.thumbUrl,
@@ -166,6 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
           height: 0,
           checksum: '',
           createdAt: 'Unknown',
+          localPath: r.localPath,
         )).toList();
         _isBackendOnline = true;
       });
@@ -180,12 +204,41 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Progressive Drop Filter
+  /// Cuts off results when the score drops by more than [threshold] compared to the previous item.
+  List<MediaResponse> _filterResults(List<MediaResponse> results, {double threshold = 0.12}) {
+    if (results.isEmpty) return [];
+
+    // 1. Sort by score descending (just in case backend didn't)
+    results.sort((a, b) => (b.score ?? 0).compareTo(a.score ?? 0));
+
+    List<MediaResponse> kept = [];
+    
+    // Always keep the first (best) result
+    kept.add(results[0]);
+
+    for (int i = 1; i < results.length; i++) {
+      final prevScore = results[i - 1].score ?? 0;
+      final currScore = results[i].score ?? 0;
+      final drop = prevScore - currScore;
+
+      if (drop > threshold) {
+        // Significant drop detected! Stop adding results.
+        break;
+      }
+      kept.add(results[i]);
+    }
+
+    return kept;
+  }
+
   /// Upload button (bottom bar) – upload new images to cloud, then refresh.
   Future<void> _uploadNewImages() async {
     final List<XFile> picked = await _picker.pickMultiImage();
     if (picked.isEmpty) return;
 
     final files = picked.map((x) => File(x.path)).toList();
+    final localPaths = picked.map((x) => x.path).toList();
 
     setState(() {
       _isLoading = true;
@@ -193,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      await _api.uploadImages(files: files, dedup: true);
+      await _api.uploadImages(files: files, localPaths: localPaths, dedup: true);
       await _loadAllImages();
     } catch (e) {
       setState(() {
@@ -438,17 +491,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   );
                 },
-                child: Image.network(
-                  url,
+                child: CachedImage(
+                  localPath: item.localPath,
+                  remoteUrl: item.thumbUrl.isNotEmpty ? item.thumbUrl : item.url,
                   fit: BoxFit.cover,
                   loadingBuilder: (context, child, progress) {
                     if (progress == null) return child;
                     return Container(color: const Color(0xFF1E1E1E));
                   },
-                  errorBuilder: (_, __, ___) => Container(
-                    color: const Color(0xFF1E1E1E),
-                    child: const Icon(Icons.broken_image, color: Colors.white24),
-                  ),
                 ),
               ),
             ),
