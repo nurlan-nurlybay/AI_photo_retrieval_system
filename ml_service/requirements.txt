@@ -1,4 +1,4 @@
---extra-index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://download.pytorch.org/whl/cu121
 
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
@@ -12,3 +12,4 @@ torchvision==0.19.1
 
 # Hugging Face (CLIPModel/CLIPProcessor)
 transformers==4.44.0
+peft==0.11.1  # <--- for fine-tuning
