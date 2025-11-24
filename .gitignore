@@ -177,3 +177,18 @@ testing_nurlan/
 .devcontainer/
 .vscode/
 docker-compose.dev.yml
+
+
+# --- DATA & ARTIFACTS STRATEGY ---
+# 1. Ignore the entire data directory (hides all archives, images, and derived data)
+data/
+*.tar.gz
+*.zip
+*.rar
+*.7z
+*.tar.bz2
+*.tar.xz
+*.tar
+
+# 2. Exclude/Un-ignore the critical metadata folder to allow tracking (overrides rule #1)
+!data/USED/CSV files for SED-EImm/
