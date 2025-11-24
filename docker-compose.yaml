@@ -34,17 +34,17 @@ services:
     volumes:
       - ./volumes/pg:/var/lib/postgresql/data
     networks: [clip-net]
-  
+
   seaweedfs:
     image: chrislusf/seaweedfs:latest
     container_name: seaweedfs
     command: "server -dir=/data -volume.max=10 -filer -s3"
     user: "0:0"
     ports:
-      - "9333:9333"   # master 
-      - "8888:8888"   # filer (HTTP file API) 
-      - "8333:8333"   # S3 gateway 
-      - "18080:18080" # volume UI 
+      - "9333:9333"   # master
+      - "8888:8888"   # filer (HTTP file API)
+      - "8333:8333"   # S3 gateway
+      - "18080:18080" # volume UI
     volumes:
       - ./seaweed-data:/data
     networks: [clip-net]
@@ -59,13 +59,21 @@ services:
       - redis-data:/data
     networks: [clip-net]
 
-
   ml_service:
     build: ./ml_service
     container_name: ml-service
     expose: ["8003"]
     ports: ["8005:8003"]
     networks: [clip-net]
+    volumes:
+      - ./data:/app/data
+      - ./fine_tuning:/app/fine_tuning
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - count: 1
+              capabilities: [gpu]
 
   vector_service:
     build: ./vector_service
@@ -73,11 +81,11 @@ services:
     expose: ["8002"]
     ports: ["8006:8002"]
     depends_on:
-      milvus:
+      milvus:  # <--- FIXED: Removed the dash (-) here
         condition: service_healthy
     networks: [clip-net]
 
-  etcd:  # metadata storage for milvus
+  etcd:
     image: quay.io/coreos/etcd:v3.5.5
     container_name: milvus-etcd
     command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
@@ -90,7 +98,7 @@ services:
       - ./volumes/etcd:/etcd
     networks: [clip-net]
 
-  minio:  # minimal input output service for milvus (object storage)
+  minio:
     image: minio/minio:RELEASE.2023-03-20T20-16-18Z
     container_name: milvus-minio
     command: minio server /minio_data --console-address ":9001"
@@ -125,7 +133,6 @@ services:
       - "etcd"
       - "minio"
     networks: [clip-net]
-
 
 networks:
   clip-net:
