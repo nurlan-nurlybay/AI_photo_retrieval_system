@@ -1,26 +1,26 @@
 name: ai-photo-retrieval
 
 services:
-  # api:
-  #   build:
-  #     context: ./backend
-  #     dockerfile: Dockerfile
-  #   container_name: backend-api
-  #   command: ["./photo-backend", "--config=/config/docker.yaml"]
-  #   ports:
-  #     - "8080:8080"
-  #   depends_on:
-  #     - postgres
-  #     - redis
-  #     - seaweedfs
-  #     - ml_service
-  #     - vector_service
-  #   environment:
-  #     - CONFIG_PATH=/config/docker.yaml
-  #   volumes:
-  #     - ./backend/config:/config
-  #   networks:
-  #     - clip-net
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend-api
+    command: ["./photo-backend", "--config=/config/docker.yaml"]
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+      - seaweedfs
+      - ml_service
+      - vector_service
+    environment:
+      - CONFIG_PATH=/config/docker.yaml
+    volumes:
+      - ./backend/config:/config
+    networks:
+      - clip-net
 
   postgres:
     image: postgres:15
@@ -68,12 +68,12 @@ services:
     volumes:
       - ./data:/app/data
       - ./fine_tuning:/app/fine_tuning
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - count: 1
-              capabilities: [gpu]
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - count: 1
+    #           capabilities: [gpu]
 
   vector_service:
     build: ./vector_service
