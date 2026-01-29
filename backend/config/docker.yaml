@@ -27,7 +27,7 @@ redis:
   poolSize: 10
 
 seaweedfs:
-  baseURL: "http://seaweedfs:8333"  
+  baseURL: "http://seaweedfs:8888"  
 
 clip:
   host: "ml_service"
@@ -35,7 +35,7 @@ clip:
 
 faiss:
   host: "vector_service"
-  port: 19530
+  port: 8002
 
 log:
   level: "info" # "info", "debug", "warn", "error"

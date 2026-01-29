@@ -97,7 +97,8 @@ func (s *Seaweedfs) Get(ctx context.Context, key string) ([]byte, error) {
 }
 
 func (s *Seaweedfs) Ping(ctx context.Context) error {
-	url := s.baseURL + "/healthz"
+	// Filer API doesn't have /healthz, use root endpoint
+	url := s.baseURL + "/"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
