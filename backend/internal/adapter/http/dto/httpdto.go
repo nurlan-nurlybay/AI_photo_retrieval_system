@@ -4,8 +4,10 @@ import "mime/multipart"
 
 // ===== Search Image =====
 type SearchTextRequest struct {
-	UserID int64  `json:"user_id" binding:"required"`
-	Query  string `json:"q" binding:"required,min=2,max=200"`
+	UserID    int64   `json:"user_id" binding:"required"`
+	Query     string  `json:"q" binding:"required,min=2,max=200"`
+	Limit     int     `json:"limit,omitempty"`     // max results (default 10, max 200)
+	Threshold float32 `json:"threshold,omitempty"` // min similarity score (0-1)
 }
 
 type SearchImageRequest struct {

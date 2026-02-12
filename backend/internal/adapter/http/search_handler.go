@@ -31,7 +31,14 @@ func (h *SearchHandler) SearchByText(c *gin.Context) {
 		return
 	}
 
-	mediaWithScore, err := h.searchUC.SearchByText(c.Request.Context(), req.UserID, req.Query, 10)
+	k := req.Limit
+	if k <= 0 {
+		k = 10
+	} else if k > 200 {
+		k = 200
+	}
+
+	mediaWithScore, err := h.searchUC.SearchByText(c.Request.Context(), req.UserID, req.Query, k)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -42,6 +49,9 @@ func (h *SearchHandler) SearchByText(c *gin.Context) {
 
 	for _, r := range mediaWithScore {
 		if r.Media == nil {
+			continue
+		}
+		if req.Threshold > 0 && r.Score < req.Threshold {
 			continue
 		}
 		resp.Results = append(resp.Results, httpdto.MediaResponse{

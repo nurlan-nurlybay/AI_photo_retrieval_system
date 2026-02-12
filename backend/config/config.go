@@ -54,7 +54,8 @@ type (
 	}
 
 	Seaweedfs struct {
-		BaseURL string `yaml:"baseURL"`
+		BaseURL   string `yaml:"baseURL"`
+		PublicURL string `yaml:"publicURL"` // URL reachable by mobile clients (defaults to BaseURL)
 	}
 
 	Clip struct {

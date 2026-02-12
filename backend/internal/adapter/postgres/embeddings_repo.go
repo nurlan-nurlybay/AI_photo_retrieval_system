@@ -209,6 +209,36 @@ func (r *EmbeddingsRepo) ListUnindexed(ctx context.Context, userID int64, limit 
 	return ids, rows.Err()
 }
 
+// ListUnembedded returns media IDs that exist in the media table but have no
+// corresponding row in the embeddings table — i.e. uploads that were never embedded.
+func (r *EmbeddingsRepo) ListUnembedded(ctx context.Context, limit int) ([]int64, error) {
+	raw := fmt.Sprintf(
+		`SELECT m.id FROM %s m LEFT JOIN %s e ON m.id = e.media_id WHERE e.media_id IS NULL ORDER BY m.id LIMIT $1`,
+		"media", EmbTableName,
+	)
+
+	q := db.Query{
+		Name:     "Emb.ListUnembedded",
+		QueryRaw: raw,
+	}
+
+	rows, err := r.db.DB().QueryContext(ctx, q, limit)
+	if err != nil {
+		return nil, fmt.Errorf("query list unembedded: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan unembedded id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (r *EmbeddingsRepo) GetEmbeddingBytes(ctx context.Context, userID, mediaID int64) ([]byte, error) {
 	emb, err := r.GetEmbedding(ctx, userID, mediaID)
 	if err != nil {

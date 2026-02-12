@@ -31,8 +31,8 @@ class _SearchScreenState extends State<SearchScreen> {
     if (q.isEmpty) return;
     setState(() { _busy = true; _results = []; });
     try {
-      final res = await _api.textSearch(q);
-      final filtered = Relevance.relativeToMax(res.results, alpha: 0.85);
+      final res = await _api.textSearch(q, limit: 50, threshold: 0);
+      final filtered = Relevance.statisticalOutliers(res.results, k: 1.0);
       setState(() => _results = filtered);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Search failed: $e')));
@@ -64,7 +64,7 @@ Future<void> _pickProbe() async {
     setState(() { _busy = true; _results = []; });
     try {
       final res = await _api.imageSearch(_probe!);
-      final filtered = Relevance.relativeToMax(res.results, alpha: 0.7);
+      final filtered = Relevance.statisticalOutliers(res.results, k: 1.0);
       setState(() => _results = filtered);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Image search failed: $e')));

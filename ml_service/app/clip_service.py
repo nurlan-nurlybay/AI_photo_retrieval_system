@@ -1,3 +1,5 @@
+import threading
+
 import torch
 import numpy as np
 from transformers import CLIPProcessor, CLIPModel
@@ -11,14 +13,29 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 # Cache models & processors by name so we only download/init once
 _MODELS: dict[str, CLIPModel] = {}
 _PROCS: dict[str, CLIPProcessor] = {}
+_LOCK = threading.Lock()
 TUNED_MODEL_PATH = "fine_tuning/clip_finetuned_epoch_3"
+
+
+def warmup() -> None:
+    """Eagerly load the default model so concurrent requests don't race."""
+    _get_model_and_processor(ModelName.vit_b32, quantize=True)
 
 
 def _get_model_and_processor(name: ModelName, quantize: bool) -> tuple[CLIPModel, CLIPProcessor]:
     key = f"{name.value}_{'tuned' if TUNED_MODEL_PATH else 'base'}_{'quantized' if quantize else 'full'}"  # Cache separately
     m = _MODELS.get(key)
     p = _PROCS.get(key)
-    if m is None or p is None:
+    if m is not None and p is not None:
+        return m, p  # type: ignore
+
+    with _LOCK:
+        # Double-check after acquiring lock
+        m = _MODELS.get(key)
+        p = _PROCS.get(key)
+        if m is not None and p is not None:
+            return m, p  # type: ignore
+
         m = CLIPModel.from_pretrained(name.value).to(device) # type: ignore
         p = CLIPProcessor.from_pretrained(name.value)
 

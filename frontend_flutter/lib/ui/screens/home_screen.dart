@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:photo_manager/photo_manager.dart';
 
 import 'package:frontend_flutter/data/api_client.dart';
 import 'package:frontend_flutter/core/config.dart';
+import 'package:frontend_flutter/core/photo_sync.dart';
 import 'package:frontend_flutter/data/models.dart';
 import 'package:frontend_flutter/ui/screens/detail_screen.dart';
 import 'package:frontend_flutter/ui/widgets/cached_image.dart';
@@ -30,22 +33,29 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isBackendOnline = false;
   String? _error;
 
-  /// URLs that we show in the grid (either full list or search results).
-  List<MediaItem> _mediaItems = [];
+  /// Device gallery assets (shown in gallery mode).
+  List<AssetEntity> _galleryAssets = [];
+
+  /// Backend search results (shown in search mode).
+  List<MediaItem> _searchResults = [];
 
   @override
   void initState() {
     super.initState();
     _checkBackendStatus();
-    _loadAllImages();
+    _loadGalleryPhotos();
+    _triggerAutoSync();
+  }
+
+  Future<void> _triggerAutoSync() async {
+    final isOnline = await _api.checkHealth();
+    if (isOnline) PhotoSyncService.instance.startSync();
   }
 
   Future<void> _checkBackendStatus() async {
     final isOnline = await _api.checkHealth();
     if (mounted) {
-      setState(() {
-        _isBackendOnline = isOnline;
-      });
+      setState(() => _isBackendOnline = isOnline);
     }
   }
 
@@ -59,8 +69,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ================= DATA LOADING =================
 
-  /// Home gallery: all user images from backend.
-  Future<void> _loadAllImages() async {
+  /// Load photos directly from the device gallery.
+  Future<void> _loadGalleryPhotos() async {
     setState(() {
       _isLoading = true;
       _error = null;
@@ -68,26 +78,41 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final List<MediaItem> items = await ApiClient.listUserImages(
-        userId: AppConfig.userId,
-        limit: 100,
-        offset: 0,
+      final permission = await PhotoManager.requestPermissionExtend();
+      if (!permission.isAuth) {
+        setState(() {
+          _error = 'Gallery permission denied. Please grant access in Settings.';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final albums = await PhotoManager.getAssetPathList(
+        type: RequestType.image,
+        filterOption: FilterOptionGroup(
+          orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
+        ),
       );
 
+      if (albums.isEmpty) {
+        setState(() {
+          _galleryAssets = [];
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // "Recent" / "All Photos" is typically the first album
+      final recentAlbum = albums.first;
+      final assets = await recentAlbum.getAssetListRange(start: 0, end: 200);
+
       setState(() {
-        _mediaItems = items;
-        _isBackendOnline = true; // If this succeeds, we are definitely online
+        _galleryAssets = assets;
       });
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        // Don't set offline here immediately, as it could be just this call
-      });
-      _checkBackendStatus(); // Re-check health specifically
+      setState(() => _error = e.toString());
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -95,14 +120,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _searchByText(String query) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) {
-      _loadAllImages();
+      _loadGalleryPhotos();
       return;
     }
-    
-    // If query is too short (backend requires min 2 chars), show blank screen
+
     if (trimmed.length < 2) {
       setState(() {
-        _mediaItems = [];
+        _searchResults = [];
         _error = null;
         _isSearchMode = true;
       });
@@ -116,43 +140,42 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final SearchResponse resp = await _api.textSearch(trimmed);
+      final SearchResponse resp = await _api.textSearch(trimmed, limit: 30);
       final filtered = _filterResults(resp.results);
 
       setState(() {
-        _mediaItems = filtered.map((r) => MediaItem(
-          id: r.id,
-          url: r.url,
-          thumbUrl: r.thumbUrl,
-          mimeType: 'image/jpeg',
-          sizeBytes: 0,
-          width: 0,
-          height: 0,
-          checksum: '',
-          createdAt: 'Unknown',
-          localPath: r.localPath,
-        )).toList();
+        _searchResults = filtered
+            .map((r) => MediaItem(
+                  id: r.id,
+                  url: r.url,
+                  thumbUrl: r.thumbUrl,
+                  mimeType: 'image/jpeg',
+                  sizeBytes: 0,
+                  width: 0,
+                  height: 0,
+                  checksum: '',
+                  createdAt: 'Unknown',
+                  localPath: r.localPath,
+                ))
+            .toList();
         _isBackendOnline = true;
       });
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-      });
+      setState(() => _error = e.toString());
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
   /// Image search using /api/search/image
   Future<void> _searchByImage([File? preSelectedFile]) async {
     File? file;
-    
+
     if (preSelectedFile != null) {
       file = preSelectedFile;
     } else {
-      final XFile? picked = await _picker.pickImage(source: ImageSource.gallery);
+      final XFile? picked =
+          await _picker.pickImage(source: ImageSource.gallery);
       if (picked == null) return;
       file = File(picked.path);
     }
@@ -161,7 +184,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _isLoading = true;
       _error = null;
       _isSearchMode = true;
-      // _searchController.text = "Searching by image..."; // Removed as per request
     });
 
     if (mounted) {
@@ -175,64 +197,56 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final SearchResponse resp = await _api.imageSearch(file);
-      // Use a slightly more lenient threshold for image search (0.15) vs text search (0.12)
       final filtered = _filterResults(resp.results, threshold: 0.25);
 
       setState(() {
-        _mediaItems = filtered.map((r) => MediaItem(
-          id: r.id,
-          url: r.url,
-          thumbUrl: r.thumbUrl,
-          mimeType: 'image/jpeg',
-          sizeBytes: 0,
-          width: 0,
-          height: 0,
-          checksum: '',
-          createdAt: 'Unknown',
-          localPath: r.localPath,
-        )).toList();
+        _searchResults = filtered
+            .map((r) => MediaItem(
+                  id: r.id,
+                  url: r.url,
+                  thumbUrl: r.thumbUrl,
+                  mimeType: 'image/jpeg',
+                  sizeBytes: 0,
+                  width: 0,
+                  height: 0,
+                  checksum: '',
+                  createdAt: 'Unknown',
+                  localPath: r.localPath,
+                ))
+            .toList();
         _isBackendOnline = true;
       });
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-      });
+      setState(() => _error = e.toString());
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
-  /// Progressive Drop Filter
-  /// Cuts off results when the score drops by more than [threshold] compared to the previous item.
-  List<MediaResponse> _filterResults(List<MediaResponse> results, {double threshold = 0.12}) {
-    if (results.isEmpty) return [];
+  /// Minimum cosine-similarity to be considered a real match.
+  static const double _minScore = 0.22;
 
-    // 1. Sort by score descending (just in case backend didn't)
+  List<MediaResponse> _filterResults(List<MediaResponse> results,
+      {double threshold = 0.12}) {
+    if (results.isEmpty) return [];
     results.sort((a, b) => (b.score ?? 0).compareTo(a.score ?? 0));
 
-    List<MediaResponse> kept = [];
-    
-    // Always keep the first (best) result
-    kept.add(results[0]);
+    // 1. Absolute floor — drop anything below minimum score
+    final aboveFloor =
+        results.where((r) => (r.score ?? 0) >= _minScore).toList();
+    if (aboveFloor.isEmpty) return [];
 
-    for (int i = 1; i < results.length; i++) {
-      final prevScore = results[i - 1].score ?? 0;
-      final currScore = results[i].score ?? 0;
-      final drop = prevScore - currScore;
-
-      if (drop > threshold) {
-        // Significant drop detected! Stop adding results.
-        break;
-      }
-      kept.add(results[i]);
+    // 2. Drop-based cutoff — stop when there's a big gap between consecutive scores
+    List<MediaResponse> kept = [aboveFloor[0]];
+    for (int i = 1; i < aboveFloor.length; i++) {
+      final drop = (aboveFloor[i - 1].score ?? 0) - (aboveFloor[i].score ?? 0);
+      if (drop > threshold) break;
+      kept.add(aboveFloor[i]);
     }
-
     return kept;
   }
 
-  /// Upload button (bottom bar) – upload new images to cloud, then refresh.
+  /// FAB upload – pick images, upload to backend, then refresh gallery.
   Future<void> _uploadNewImages() async {
     final List<XFile> picked = await _picker.pickMultiImage();
     if (picked.isEmpty) return;
@@ -246,16 +260,16 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      await _api.uploadImages(files: files, localPaths: localPaths, dedup: true);
-      await _loadAllImages();
+      final resp = await _api.uploadImages(
+          files: files, localPaths: localPaths, dedup: true);
+      if (resp.summary.saved > 0) {
+        PhotoSyncService.instance.notifyNewUploads(resp.summary.saved);
+      }
+      await _loadGalleryPhotos();
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-      });
+      setState(() => _error = e.toString());
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
@@ -272,10 +286,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'home_fab',
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        onPressed: _uploadNewImages,
+        child: const Icon(Icons.add_photo_alternate_outlined),
+      ),
       body: SafeArea(
         child: Column(
           children: [
@@ -283,6 +302,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _buildStatusIndicator(),
             const SizedBox(height: 8),
             _buildSearchRow(),
+            const _SyncBanner(),
             const SizedBox(height: 16),
             Expanded(
               child: AnimatedSwitcher(
@@ -292,7 +312,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: _buildContent(),
               ),
             ),
-            _buildBottomBar(bottomPadding),
           ],
         ),
       ),
@@ -308,10 +327,14 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: _isBackendOnline ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+              color: _isBackendOnline
+                  ? Colors.green.withOpacity(0.1)
+                  : Colors.red.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: _isBackendOnline ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3),
+                color: _isBackendOnline
+                    ? Colors.green.withOpacity(0.3)
+                    : Colors.red.withOpacity(0.3),
               ),
             ),
             child: Row(
@@ -347,7 +370,6 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          // SearchBar
           Expanded(
             child: Container(
               height: 52,
@@ -376,12 +398,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       onChanged: _onSearchChanged,
                     ),
                   ),
+                  if (_isSearchMode)
+                    GestureDetector(
+                      onTap: () {
+                        _searchController.clear();
+                        _loadGalleryPhotos();
+                      },
+                      child: const Icon(Icons.close, color: Colors.white54, size: 20),
+                    ),
                 ],
               ),
             ),
           ),
           const SizedBox(width: 12),
-          // Image Search Icon
           SizedBox(
             height: 52,
             width: 52,
@@ -396,10 +425,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: InkWell(
                   onTap: () => _searchByImage(),
                   child: const Center(
-                    child: Icon(
-                      Icons.camera_alt_outlined,
-                      color: Colors.white,
-                    ),
+                    child: Icon(Icons.camera_alt_outlined, color: Colors.white),
                   ),
                 ),
               ),
@@ -432,48 +458,80 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    if (_mediaItems.isEmpty) {
-      return Center(
-        key: const ValueKey('empty'),
+    if (_isSearchMode) {
+      return _buildSearchGrid();
+    }
+
+    return _buildGalleryGrid();
+  }
+
+  /// Grid showing device gallery photos.
+  Widget _buildGalleryGrid() {
+    if (_galleryAssets.isEmpty) {
+      return const Center(
+        key: ValueKey('empty-gallery'),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              _isSearchMode ? Icons.search_off : Icons.photo_library_outlined,
-              size: 48,
-              color: Colors.white24,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _isSearchMode ? 'No results found' : 'Gallery is empty',
-              style: const TextStyle(
-                color: Colors.white54,
-                fontSize: 16,
-              ),
-            ),
+            Icon(Icons.photo_library_outlined, size: 48, color: Colors.white24),
+            SizedBox(height: 16),
+            Text('Gallery is empty',
+                style: TextStyle(color: Colors.white54, fontSize: 16)),
           ],
         ),
       );
     }
 
     return Padding(
-      key: const ValueKey('grid'),
+      key: const ValueKey('gallery-grid'),
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: GridView.builder(
-        itemCount: _mediaItems.length,
+        itemCount: _galleryAssets.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3,
           mainAxisSpacing: 2,
           crossAxisSpacing: 2,
-          childAspectRatio: 1.0, // Square tiles for cleaner look
         ),
         itemBuilder: (context, index) {
-          final item = _mediaItems[index];
-          // Fix URL for Android Emulator
-          final url = AppConfig.fixImageUrl(
-            item.thumbUrl.isNotEmpty ? item.thumbUrl : item.url,
+          final asset = _galleryAssets[index];
+          return _GalleryThumbnail(
+            asset: asset,
+            onTap: () => _openAssetDetail(asset),
           );
+        },
+      ),
+    );
+  }
 
+  /// Grid showing backend search results.
+  Widget _buildSearchGrid() {
+    if (_searchResults.isEmpty) {
+      return const Center(
+        key: ValueKey('empty-search'),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off, size: 48, color: Colors.white24),
+            SizedBox(height: 16),
+            Text('No results found',
+                style: TextStyle(color: Colors.white54, fontSize: 16)),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      key: const ValueKey('search-grid'),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: GridView.builder(
+        itemCount: _searchResults.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          mainAxisSpacing: 2,
+          crossAxisSpacing: 2,
+        ),
+        itemBuilder: (context, index) {
+          final item = _searchResults[index];
           return Hero(
             tag: item.url,
             child: Material(
@@ -493,7 +551,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
                 child: CachedImage(
                   localPath: item.localPath,
-                  remoteUrl: item.thumbUrl.isNotEmpty ? item.thumbUrl : item.url,
+                  remoteUrl:
+                      item.thumbUrl.isNotEmpty ? item.thumbUrl : item.url,
                   fit: BoxFit.cover,
                   loadingBuilder: (context, child, progress) {
                     if (progress == null) return child;
@@ -508,86 +567,200 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildBottomBar(double bottomPadding) {
-    return Container(
-      padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + bottomPadding),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        border: Border(top: BorderSide(color: Colors.white10)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _BottomBarButton(
-              icon: Icons.grid_view,
-              label: 'Gallery',
-              isActive: !_isSearchMode,
-              onTap: () {
-                _searchController.clear();
-                _loadAllImages();
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _BottomBarButton(
-              icon: Icons.add_photo_alternate_outlined,
-              label: 'Upload',
-              isActive: false,
-              onTap: _uploadNewImages,
-            ),
-          ),
-        ],
+  /// Open a device gallery asset in DetailScreen.
+  Future<void> _openAssetDetail(AssetEntity asset) async {
+    final file = await asset.file;
+    if (file == null || !mounted) return;
+
+    final item = MediaItem(
+      id: asset.id.hashCode,
+      url: file.path,
+      thumbUrl: file.path,
+      mimeType: asset.mimeType ?? 'image/jpeg',
+      sizeBytes: asset.size.width.toInt() * asset.size.height.toInt(),
+      width: asset.size.width.toInt(),
+      height: asset.size.height.toInt(),
+      checksum: '',
+      createdAt: asset.createDateTime.toIso8601String(),
+      takenAt: asset.createDateTime.toIso8601String(),
+      localPath: file.path,
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DetailScreen(
+          imageUrl: file.path,
+          mediaItem: item,
+          onFindSimilar: (f) => _searchByImage(f),
+        ),
       ),
     );
   }
 }
 
-class _BottomBarButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
+// ---------------------------------------------------------------------------
+// Sync banner – subscribes to PhotoSyncService progress stream
+// ---------------------------------------------------------------------------
 
-  const _BottomBarButton({
-    required this.icon,
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
+class _SyncBanner extends StatefulWidget {
+  const _SyncBanner();
+
+  @override
+  State<_SyncBanner> createState() => _SyncBannerState();
+}
+
+class _SyncBannerState extends State<_SyncBanner> {
+  late StreamSubscription<PhotoSyncProgress> _sub;
+  PhotoSyncProgress _progress = PhotoSyncService.instance.lastProgress;
+  Timer? _autoDismiss;
+
+  @override
+  void initState() {
+    super.initState();
+    _sub = PhotoSyncService.instance.progressStream.listen((p) {
+      if (!mounted) return;
+      setState(() => _progress = p);
+
+      _autoDismiss?.cancel();
+      if (p.status == PhotoSyncStatus.completed) {
+        _autoDismiss = Timer(const Duration(seconds: 4), () {
+          if (mounted) {
+            setState(() =>
+                _progress = const PhotoSyncProgress()); // back to idle
+          }
+        });
+      } else if (p.status == PhotoSyncStatus.error) {
+        _autoDismiss = Timer(const Duration(seconds: 5), () {
+          if (mounted) {
+            setState(() => _progress = const PhotoSyncProgress());
+          }
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub.cancel();
+    _autoDismiss?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+    if (_progress.status == PhotoSyncStatus.idle) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Container(
-        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: isActive ? Colors.white : Colors.transparent,
+          color: const Color(0xFF1E1E1E),
           borderRadius: BorderRadius.circular(12),
-          border: isActive ? null : Border.all(color: Colors.white24),
+          border: Border.all(color: Colors.white10),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              icon, 
-              color: isActive ? Colors.black : Colors.white,
-              size: 20,
+            Row(
+              children: [
+                _buildLeadingIcon(),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _progress.displayText,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive ? Colors.black : Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
+            if (_progress.status == PhotoSyncStatus.syncing) ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: _progress.progressFraction,
+                  backgroundColor: Colors.white12,
+                  color: Colors.blueAccent,
+                  minHeight: 4,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLeadingIcon() {
+    switch (_progress.status) {
+      case PhotoSyncStatus.checking:
+        return const SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Colors.white54,
+          ),
+        );
+      case PhotoSyncStatus.syncing:
+        return const Icon(Icons.cloud_upload_outlined,
+            size: 18, color: Colors.blueAccent);
+      case PhotoSyncStatus.completed:
+        return const Icon(Icons.cloud_done_outlined,
+            size: 18, color: Colors.greenAccent);
+      case PhotoSyncStatus.error:
+        return const Icon(Icons.cloud_off_outlined,
+            size: 18, color: Colors.redAccent);
+      case PhotoSyncStatus.idle:
+        return const SizedBox.shrink();
+    }
+  }
+}
+
+/// Thumbnail widget that loads from a device gallery [AssetEntity].
+class _GalleryThumbnail extends StatefulWidget {
+  final AssetEntity asset;
+  final VoidCallback onTap;
+
+  const _GalleryThumbnail({required this.asset, required this.onTap});
+
+  @override
+  State<_GalleryThumbnail> createState() => _GalleryThumbnailState();
+}
+
+class _GalleryThumbnailState extends State<_GalleryThumbnail> {
+  Uint8List? _thumbBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadThumb();
+  }
+
+  Future<void> _loadThumb() async {
+    final bytes = await widget.asset.thumbnailDataWithSize(
+      const ThumbnailSize(300, 300),
+    );
+    if (mounted && bytes != null) {
+      setState(() => _thumbBytes = bytes);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: _thumbBytes != null
+          ? Image.memory(_thumbBytes!, fit: BoxFit.cover)
+          : Container(color: const Color(0xFF1E1E1E)),
     );
   }
 }

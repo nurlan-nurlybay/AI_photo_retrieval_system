@@ -28,6 +28,15 @@ class MediaResponse {
       localPath: json['local_path'] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'user_id': userId,
+        'url': url,
+        'thumb_url': thumbUrl,
+        'score': score,
+        'local_path': localPath,
+      };
 }
 
 /// Response for /api/search/text and /api/search/image
@@ -202,4 +211,95 @@ class UserImagesListResponse {
       total: json['total'] as int? ?? list.length,
     );
   }
+}
+
+/// AI-detected photo category.
+class PhotoCategory {
+  final String name;
+  final dynamic icon; // IconData
+  final String coverUrl;
+  final int count;
+  final String query;
+  final List<MediaResponse> results;
+
+  PhotoCategory({
+    required this.name,
+    required this.icon,
+    required this.coverUrl,
+    required this.count,
+    this.query = '',
+    this.results = const [],
+  });
+}
+
+/// A photo stored inside an album.
+class AlbumPhoto {
+  final int id;
+  final String url;
+  final String thumbUrl;
+  final String? localPath;
+
+  AlbumPhoto({
+    required this.id,
+    required this.url,
+    required this.thumbUrl,
+    this.localPath,
+  });
+
+  factory AlbumPhoto.fromJson(Map<String, dynamic> json) => AlbumPhoto(
+        id: json['id'] as int,
+        url: json['url'] as String,
+        thumbUrl: json['thumb_url'] as String,
+        localPath: json['local_path'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'url': url,
+        'thumb_url': thumbUrl,
+        'local_path': localPath,
+      };
+
+  factory AlbumPhoto.fromMediaItem(MediaItem item) => AlbumPhoto(
+        id: item.id,
+        url: item.url,
+        thumbUrl: item.thumbUrl,
+        localPath: item.localPath,
+      );
+}
+
+/// User-created photo album (persisted in SharedPreferences).
+class PhotoAlbum {
+  final String id;
+  final String name;
+  final List<AlbumPhoto> photos;
+
+  PhotoAlbum({
+    required this.id,
+    required this.name,
+    List<AlbumPhoto>? photos,
+  }) : photos = photos ?? [];
+
+  String get coverUrl => photos.isNotEmpty
+      ? (photos.first.thumbUrl.isNotEmpty
+          ? photos.first.thumbUrl
+          : photos.first.url)
+      : '';
+
+  int get count => photos.length;
+
+  factory PhotoAlbum.fromJson(Map<String, dynamic> json) => PhotoAlbum(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        photos: (json['photos'] as List<dynamic>?)
+                ?.map((e) => AlbumPhoto.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [],
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'photos': photos.map((p) => p.toJson()).toList(),
+      };
 }

@@ -43,9 +43,12 @@ class ApiClient {
   Future<bool> checkHealth() async {
     try {
       final uri = Uri.parse(AppConfig.healthEndpoint);
+      print('[health] GET $uri');
       final resp = await _client.get(uri).timeout(const Duration(seconds: 5));
+      print('[health] status=${resp.statusCode}');
       return resp.statusCode == 200;
     } catch (e) {
+      print('[health] FAILED: $e');
       return false;
     }
   }
@@ -53,8 +56,18 @@ class ApiClient {
   /// TEXT SEARCH
   /// POST { "user_id": int, "q": "..." } to /api/search/text
   /// Returns SearchResponse { results: [MediaResponse], total: int }
-  Future<SearchResponse> textSearch(String query) async {
+  Future<SearchResponse> textSearch(
+    String query, {
+    int? limit,
+    double? threshold,
+  }) async {
     final uri = Uri.parse(AppConfig.textSearchEndpoint);
+    final body = <String, dynamic>{
+      'user_id': AppConfig.userId,
+      'q': query,
+    };
+    if (limit != null) body['limit'] = limit;
+    if (threshold != null) body['threshold'] = threshold;
     final resp = await _client
         .post(
           uri,
@@ -63,7 +76,7 @@ class ApiClient {
             'Accept': 'application/json',
             ...defaultHeaders,
           },
-          body: jsonEncode({'user_id': AppConfig.userId, 'q': query}),
+          body: jsonEncode(body),
         )
         .timeout(const Duration(seconds: 20));
     return SearchResponse.fromJson(resp.requireOkJson());

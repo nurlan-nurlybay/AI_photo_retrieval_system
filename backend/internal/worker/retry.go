@@ -2,8 +2,10 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
+	ucdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase/dto"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/utils"
 )
 
@@ -13,6 +15,10 @@ type RetryWorker struct {
 	Faiss          VectorIndex
 	Interval       time.Duration // e.g. 1 * time.Second
 	Batch          int           // e.g. 500
+
+	// Re-enqueue media that have no embeddings row at all
+	Queue    Enqueuer
+	QueueKey string // e.g. "jobs:embed"
 
 	// If your FAISS service returns a recognizable "already exists" error list substrings here
 	AlreadyExistsSubstrings []string
@@ -40,28 +46,52 @@ func (w *RetryWorker) Run(ctx context.Context) error {
 }
 
 func (w *RetryWorker) step(ctx context.Context) {
-	// TODO userID
+	// 1. Replay existing pending/failed embeddings into FAISS
 	ids, err := w.EmbeddingsRepo.ListUnindexed(ctx, 0, w.Batch)
-	if err != nil || len(ids) == 0 {
-		return
-	}
-	for _, mediaID := range ids {
-		vb, err := w.EmbeddingsRepo.GetEmbeddingBytes(ctx, 0, mediaID)
-		if err != nil || len(vb) == 0 {
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, utils.TruncateErr(err))
-			continue
-		}
-		vec := utils.BytesToFloat32(vb)
-
-		if err := w.Faiss.Insert(ctx, 404, mediaID, vec); err != nil {
-			if isAlreadyExists(err, w.AlreadyExistsSubstrings) {
-				_ = w.EmbeddingsRepo.MarkInIndex(ctx, 404, mediaID)
+	if err == nil && len(ids) > 0 {
+		for _, mediaID := range ids {
+			vb, err := w.EmbeddingsRepo.GetEmbeddingBytes(ctx, 0, mediaID)
+			if err != nil || len(vb) == 0 {
+				_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, utils.TruncateErr(err))
 				continue
 			}
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, utils.TruncateErr(err))
+			vec := utils.BytesToFloat32(vb)
+
+			if err := w.Faiss.Insert(ctx, 404, mediaID, vec); err != nil {
+				if isAlreadyExists(err, w.AlreadyExistsSubstrings) {
+					_ = w.EmbeddingsRepo.MarkInIndex(ctx, 404, mediaID)
+					continue
+				}
+				_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, utils.TruncateErr(err))
+				continue
+			}
+			_ = w.EmbeddingsRepo.MarkInIndex(ctx, 404, mediaID)
+		}
+	}
+
+	// 2. Re-enqueue media that have no embeddings row at all (uploaded while ML was down)
+	if w.Queue == nil {
+		return
+	}
+	unembedded, err := w.EmbeddingsRepo.ListUnembedded(ctx, w.Batch)
+	if err != nil || len(unembedded) == 0 {
+		return
+	}
+	queueKey := w.QueueKey
+	if queueKey == "" {
+		queueKey = "jobs:embed"
+	}
+	for _, mediaID := range unembedded {
+		job := ucdto.EmbedJob{
+			UserID:   404,
+			MediaID:  mediaID,
+			Modality: "image",
+		}
+		payload, err := json.Marshal(job)
+		if err != nil {
 			continue
 		}
-		_ = w.EmbeddingsRepo.MarkInIndex(ctx, 404, mediaID)
+		_ = w.Queue.Enqueue(ctx, queueKey, payload)
 	}
 }
 
