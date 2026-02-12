@@ -76,7 +76,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	}
 	log.Info("connected to Redis client", "addr", cfg.Redis.Addr)
 
-	store, err := seaweedfs.NewSeaweedfs(ctx, cfg.Seaweedfs.BaseURL, httpClient)
+	store, err := seaweedfs.NewSeaweedfs(ctx, cfg.Seaweedfs.BaseURL, cfg.Seaweedfs.PublicURL, httpClient)
 	if err != nil {
 		log.Fatal("failed to conn seaweedfs:", err)
 	}
@@ -105,9 +105,12 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 		Log:            log,
 	}
 	rw := &worker.RetryWorker{
-		EmbeddingsRepo: embeddingsRepo,
-		Faiss:          faissClient,
-		Interval:       30 * time.Second, Batch: 500,
+		EmbeddingsRepo:          embeddingsRepo,
+		Faiss:                   faissClient,
+		Queue:                   redisClient,
+		QueueKey:                "jobs:embed",
+		Interval:                30 * time.Second,
+		Batch:                   500,
 		AlreadyExistsSubstrings: []string{"already exists", "duplicate id"},
 	}
 

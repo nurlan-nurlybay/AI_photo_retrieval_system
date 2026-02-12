@@ -27,7 +27,8 @@ redis:
   poolSize: 10
 
 seaweedfs:
-  baseURL: "http://seaweedfs:8888"  
+  baseURL: "http://seaweedfs:8888"
+  publicURL: "http://localhost:8888"
 
 clip:
   host: "ml_service"

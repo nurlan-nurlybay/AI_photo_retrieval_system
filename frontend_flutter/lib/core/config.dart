@@ -9,11 +9,20 @@ class AppConfig {
   static const String _rawBaseUrl =
       String.fromEnvironment('BACKEND_BASE_URL', defaultValue: 'http://10.0.2.2:8080');
 
-  /// 2) Normalize localhost for Android emulator (10.0.2.2)
+  /// 2) Normalize addresses per platform
   static String get baseUrl {
-    if (Platform.isAndroid && _rawBaseUrl.contains('127.0.0.1')) {
-      // Mirrored Networking: 10.0.2.2 works correctly!
-      return _rawBaseUrl.replaceFirst('127.0.0.1', '10.0.2.2');
+    if (Platform.isAndroid) {
+      // Android emulator: 10.0.2.2 maps to host localhost
+      if (_rawBaseUrl.contains('127.0.0.1') || _rawBaseUrl.contains('localhost')) {
+        return _rawBaseUrl
+            .replaceFirst('127.0.0.1', '10.0.2.2')
+            .replaceFirst('localhost', '10.0.2.2');
+      }
+    } else if (Platform.isIOS) {
+      // iOS simulator: 10.0.2.2 doesn't work, use localhost
+      if (_rawBaseUrl.contains('10.0.2.2')) {
+        return _rawBaseUrl.replaceFirst('10.0.2.2', 'localhost');
+      }
     }
     return _rawBaseUrl;
   }
@@ -34,9 +43,13 @@ class AppConfig {
   /// Helper to fix image URLs for Android Emulator
   /// In Mirrored Mode, SeaweedFS (port 8333) needs the actual WSL IP
   static String fixImageUrl(String url) {
-    if (Platform.isAndroid && url.contains('localhost:8333')) {
-      // Use WSL IP directly (update this if your WSL IP changes)
-      return url.replaceFirst('localhost:8333', '172.16.0.2:8333');
+    // Legacy: old photos stored with Docker-internal hostname
+    if (url.contains('seaweedfs:8888')) {
+      url = url.replaceFirst('seaweedfs:8888', 'localhost:8888');
+    }
+    // Android emulator can't reach host via localhost
+    if (Platform.isAndroid && url.contains('localhost:8888')) {
+      return url.replaceFirst('localhost:8888', '10.0.2.2:8888');
     }
     return url;
   }

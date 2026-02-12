@@ -1,8 +1,7 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import '../../data/api_client.dart';
-import '../../data/models.dart';
+import 'package:frontend_flutter/core/photo_sync.dart';
 import 'package:frontend_flutter/data/api_client.dart';
 import 'package:frontend_flutter/data/models.dart';
 import 'package:frontend_flutter/ui/util/pick.dart';
@@ -52,6 +51,9 @@ Future<void> _pickImages() async {
       final localPaths = _picked.map((f) => f.path).toList();
       final resp = await _api.uploadImages(files: _picked, localPaths: localPaths, dedup: true);
       setState(() => _last = resp);
+      if (resp.summary.saved > 0) {
+        PhotoSyncService.instance.notifyNewUploads(resp.summary.saved);
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Saved: ${resp.summary.saved}, Duplicates: ${resp.summary.duplicates}, Failed: ${resp.summary.failed}')),
       );

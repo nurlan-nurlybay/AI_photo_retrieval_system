@@ -43,6 +43,11 @@ type EmbeddingsRepo interface {
 	// Retry helpers
 	ListUnindexed(ctx context.Context, userID int64, limit int) ([]int64, error) // rows where status IN ('pending','failed')
 	GetEmbeddingBytes(ctx context.Context, userID, mediaID int64) ([]byte, error)
+	ListUnembedded(ctx context.Context, limit int) ([]int64, error) // media IDs with no embeddings row
+}
+
+type Enqueuer interface {
+	Enqueue(ctx context.Context, key string, payload []byte) error
 }
 
 // consume upload jobs, embed, store, index, set status

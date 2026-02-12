@@ -9,12 +9,17 @@ import (
 )
 
 type Seaweedfs struct {
-	baseURL string
-	client  *http.Client
+	baseURL   string // internal Docker URL for actual HTTP calls
+	publicURL string // URL returned to clients (mobile app)
+	client    *http.Client
 }
 
-func NewSeaweedfs(ctx context.Context, url string, client *http.Client) (*Seaweedfs, error) {
-	s := &Seaweedfs{baseURL: url, client: client}
+func NewSeaweedfs(ctx context.Context, url string, publicURL string, client *http.Client) (*Seaweedfs, error) {
+	pub := publicURL
+	if pub == "" {
+		pub = url
+	}
+	s := &Seaweedfs{baseURL: url, publicURL: pub, client: client}
 
 	if err := s.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("seaweedfs connection failed: %w", err)
@@ -23,9 +28,9 @@ func NewSeaweedfs(ctx context.Context, url string, client *http.Client) (*Seawee
 }
 
 func (s *Seaweedfs) Put(ctx context.Context, key string, r *bytes.Reader) (string, error) {
-	url := fmt.Sprintf("%s/%s", s.baseURL, key)
+	internalURL := fmt.Sprintf("%s/%s", s.baseURL, key)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, r)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, internalURL, r)
 	if err != nil {
 		return "", fmt.Errorf("create put request: %w", err)
 	}
@@ -44,8 +49,9 @@ func (s *Seaweedfs) Put(ctx context.Context, key string, r *bytes.Reader) (strin
 		return "", fmt.Errorf("upload failed: %s - %s", resp.Status, string(body))
 	}
 
-	// return accessible URL for later retrieval
-	return url, nil
+	// return public URL for client-facing responses
+	publicURL := fmt.Sprintf("%s/%s", s.publicURL, key)
+	return publicURL, nil
 }
 
 func (s *Seaweedfs) Delete(ctx context.Context, key string) error {

@@ -155,6 +155,11 @@ class DetailScreen extends StatelessWidget {
   }
 
   Future<void> _handleFindSimilar(BuildContext context) async {
+    // Capture references before any async gap to avoid context issues.
+    final navigator = Navigator.of(context);
+    final scaffold = ScaffoldMessenger.of(context);
+    final callback = onFindSimilar;
+
     try {
       // Show loading indicator
       showDialog(
@@ -174,18 +179,16 @@ class DetailScreen extends StatelessWidget {
         await searchFile.writeAsBytes(response.bodyBytes);
       }
 
-      if (context.mounted) {
-        Navigator.pop(context); // Dismiss loading
-        Navigator.pop(context); // Close detail screen
-        onFindSimilar(searchFile); // Trigger search on Home
-      }
+      navigator.pop(); // Dismiss loading
+      navigator.pop(); // Close detail screen
+      callback(searchFile); // Trigger search on Home
     } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context); // Dismiss loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
+      try {
+        navigator.pop(); // Dismiss loading
+      } catch (_) {}
+      scaffold.showSnackBar(
+        SnackBar(content: Text('Error finding similar: $e')),
+      );
     }
   }
 }

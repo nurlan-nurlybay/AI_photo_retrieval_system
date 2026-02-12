@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, UploadFile, File, Body, HTTPException
 from .models import (
     TextRequest, VectorResponse,
@@ -5,11 +7,19 @@ from .models import (
 )
 from .clip_service import (
     encode_text,
-    encode_image
+    encode_image,
+    warmup,
 )
 import requests
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    warmup()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 # ---------- Batch text (JSON body) ----------
 @app.post("/v1/encode/text/", response_model=VectorResponse)
