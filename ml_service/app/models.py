@@ -1,13 +1,14 @@
 from enum import Enum
-from pydantic import BaseModel, conlist  # field_validator not used here
+from typing import Annotated
+from pydantic import BaseModel, conlist, Field
 
 # ----- Batch text -----
 class TextRequest(BaseModel):
-    texts: conlist(str, min_length=1, max_length=1024)
+    texts: Annotated[list[str], Field(min_length=1, max_length=1024)]
 
 class VectorResponse(BaseModel):
     # 512-d for ViT-B/32 and ViT-L/14
-    vectors: list[conlist(float, min_length=512, max_length=512)]
+    vectors: Annotated[list[list[float]], Field(min_length=512, max_length=512)]
 
 # ----- Dynamic model/options -----
 class ModelName(str, Enum):

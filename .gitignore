@@ -192,3 +192,5 @@ data/
 
 # 2. Exclude/Un-ignore the critical metadata folder to allow tracking (overrides rule #1)
 !data/USED/CSV files for SED-EImm/
+eval_data/
+*.png
