@@ -1,0 +1,12 @@
+torch
+torchvision
+torchaudio
+transformers
+accelerate
+bitsandbytes
+sentencepiece
+protobuf
+pillow
+tqdm
+qwen-vl-utils @ git+https://github.com/QwenLM/qwen-vl-utils.git
+flash-attn --no-build-isolation

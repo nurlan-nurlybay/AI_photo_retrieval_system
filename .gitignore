@@ -1,3 +1,19 @@
+# model analysis
+nurlan_images/
+alibek_images/
+aydin_images/
+elnaz_images/
+evaluation_dataset/
+*.png
+*.jpg
+*.jpeg
+*.JPEG
+*.webp
+*.heic
+*.heif
+
+# ...
+
 bin/
 seaweed_data/
 .venv/
@@ -194,3 +210,8 @@ data/
 !data/USED/CSV files for SED-EImm/
 eval_data/
 *.png
+
+# Binaries
+**/bin/
+backend/bin/
+photo-backend
