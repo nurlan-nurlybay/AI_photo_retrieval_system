@@ -11,7 +11,7 @@ from transformers import (
     AutoProcessor, 
     AutoModel, 
     BitsAndBytesConfig, 
-    Qwen2_5_VLForConditionalGeneration
+    AutoModelForImageTextToText
 )
 from qwen_vl_utils import process_vision_info
 
@@ -54,7 +54,6 @@ def load_dataset():
                 img_path = next(DATASET_ROOT.glob(f"{person}/**/{img_name}"), None)
                 if img_path: paths[img_name] = img_path
     
-    # Rigorous Image Verification
     valid_names, valid_files = [], []
     print("🔍 Pre-verifying images to filter out corrupt files...")
     for name in tqdm(list(paths.keys()), desc="Verifying"):
@@ -105,7 +104,7 @@ def run_bi_encoder(model_name, metadata, valid_names, valid_files, paths, is_sig
             img_embs.append(features / features.norm(p=2, dim=-1, keepdim=True))
     
     img_embs = torch.cat(img_embs)
-    recall_1, recall_5 = 0, 0
+    recall_1, recall_5, recall_10 = 0, 0, 0
     all_hits = []
 
     with torch.no_grad():
@@ -126,10 +125,15 @@ def run_bi_encoder(model_name, metadata, valid_names, valid_files, paths, is_sig
             
             if i in indices[:1]: recall_1 += 1
             if i in indices[:5]: recall_5 += 1
+            if i in indices[:10]: recall_10 += 1
             
             all_hits.append([{"corpus_id": idx, "score": val} for idx, val in zip(indices, top_k.values.tolist())])
 
-    save_results(model_name, {"Recall@1": round((recall_1/len(valid_names))*100, 2), "Recall@5": round((recall_5/len(valid_names))*100, 2)})
+    save_results(model_name, {
+        "Recall@1": round((recall_1/len(valid_names))*100, 2), 
+        "Recall@5": round((recall_5/len(valid_names))*100, 2),
+        "Recall@10": round((recall_10/len(valid_names))*100, 2)
+    })
     
     if is_siglip:
         torch.save(img_embs, VECTORS_FILE)
@@ -161,14 +165,14 @@ def run_qwen(metadata, paths, size_label="8B"):
     
     Path("/workspace/offload").mkdir(exist_ok=True)
     
-    # Dynamic VRAM cap: 8B fits well, 32B needs heavy restriction
     max_mem = {0: "40GiB", "cpu": "100GiB"} if size_label == "8B" else {0: "30GiB", "cpu": "100GiB"}
 
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+    model = AutoModelForImageTextToText.from_pretrained(
         model_id, 
         quantization_config=bnb_config, 
         device_map="auto",
         max_memory=max_mem,
+        attn_implementation="sdpa",
         offload_folder="/workspace/offload"
     )
 
@@ -185,7 +189,7 @@ def run_qwen(metadata, paths, size_label="8B"):
             msgs = [{"role": "user", "content": [{"type": "image", "image": img_path}, {"type": "text", "text": f"Score 0-100 for match: '{query}'. Num only."}]}]
             try:
                 text = processor.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
-                image_inputs, _ = process_vision_info(msgs)
+                image_inputs, *_ = process_vision_info(msgs)
                 inputs = processor(text=[text], images=image_inputs, padding=True, return_tensors="pt").to(DEVICE)
                 with torch.no_grad():
                     gen_ids = model.generate(**inputs, max_new_tokens=5)
