@@ -215,3 +215,5 @@ eval_data/
 **/bin/
 backend/bin/
 photo-backend
+
+*.deb

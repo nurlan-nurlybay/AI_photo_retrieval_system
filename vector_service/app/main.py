@@ -1,162 +1,104 @@
-from fastapi import FastAPI
+import time
+import structlog
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
+
 from app.models import (
     VectorAddRequest, VectorAddResponse,
     VectorDeleteRequest, VectorDeleteResponse,
     VectorSearchRequest, VectorSearchResponse,
-    NamespaceListResponse, NamespaceDeleteResponse, ClearAllResponse,
+    StandardResponse, SystemClearResponse
 )
-import app.index_milvus as idx
-import traceback
+from app.core import (
+    add_vector, delete_vector, search_vectors,
+    drop_namespace, clear_namespace_data, clear_all_namespaces
+)
 
-app = FastAPI(title="faiss-service", version="1.0")
+# Setup Logging
+structlog.configure(processors=[structlog.processors.JSONRenderer()])
+logger = structlog.get_logger()
 
-# ---------- Health ----------
-@app.get("/v1/healthz")
+app = FastAPI(title="Vector Service", version="2.0")
+
+# Setup Metrics
+instrumentator = Instrumentator().instrument(app).expose(app)
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration = time.perf_counter() - start
+    logger.info("http_request", method=request.method, path=request.url.path, status=response.status_code, duration=f"{duration:.4f}s")
+    return response
+
+@app.get("/healthz")
 def healthz():
-    state = idx.health()
-    return {"ok": True, **state}
+    return {"ok": True, "status": "healthy"}
 
+# ---------- Vector Operations ----------
 
-# ---------- Add ----------
 @app.post("/v1/vectors/add", response_model=VectorAddResponse)
-def add_vector(req: VectorAddRequest):
+def api_add_vector(req: VectorAddRequest):
     try:
-        idx.add(req.namespace, req.id, req.vector, req.normalize)
-        return VectorAddResponse(
-            ok=True,
-            id=req.id,
-            namespace=req.namespace,
-            replaced=False,
-            dim=len(req.vector),
-        )
-
-    except ValueError as e:
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "id": req.id, "namespace": req.namespace, "error": str(e)},
-        )
+        add_vector(req.namespace, req.id, req.vector, req.normalize)
+        return {"ok": True, "id": req.id, "namespace": req.namespace, "dim": len(req.vector)}
     except Exception as e:
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={
-                "ok": False,
-                "id": req.id,
-                "namespace": req.namespace,
-                "error": str(e) or "index_write_failed",
-            },
-        )
+        logger.error("vector_add_failed", namespace=req.namespace, id=req.id, error=str(e))
+        return JSONResponse(status_code=500, content={"ok": False, "id": req.id, "namespace": req.namespace, "error": str(e)})
 
-
-# ---------- Delete ----------
 @app.post("/v1/vectors/delete", response_model=VectorDeleteResponse)
-def delete_vector(req: VectorDeleteRequest):
+def api_delete_vector(req: VectorDeleteRequest):
     try:
-        namespace = req.namespace or req.model  # backward compatibility
-        res = idx.delete(namespace, req.id)
-        return VectorDeleteResponse(
-            ok=True,
-            id=req.id,
-            namespace=namespace,
-            deleted=res.get("deleted", False),
-        )
-
-    except KeyError:
-        return JSONResponse(
-            status_code=404,
-            content={"ok": False, "model": req.model, "id": req.id, "error": "not_found"},
-        )
+        deleted = delete_vector(req.namespace, req.id)
+        return {"ok": True, "id": req.id, "namespace": req.namespace, "deleted": deleted}
     except Exception as e:
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={
-                "ok": False,
-                "model": req.model,
-                "id": req.id,
-                "error": str(e) or "index_delete_failed",
-            },
-        )
+        logger.error("vector_delete_failed", namespace=req.namespace, id=req.id, error=str(e))
+        return JSONResponse(status_code=500, content={"ok": False, "id": req.id, "namespace": req.namespace, "deleted": False, "error": str(e)})
 
-
-# ---------- Search ----------
 @app.post("/v1/vectors/search", response_model=VectorSearchResponse)
-def search_vector(req: VectorSearchRequest):
+def api_search_vectors(req: VectorSearchRequest):
     try:
-        namespace = req.namespace or req.model  # backward compatibility
-        res = idx.search(namespace, req.vector, req.k, req.normalize)
-        return VectorSearchResponse(
-            ok=True,
-            namespace=namespace,
-            k=req.k,
-            results=res.get("results", []),
-            degraded=res.get("degraded", False),
-            tookMs=res.get("tookMs"),
-        )
-
-    except ValueError as e:
-        return JSONResponse(
-            status_code=400,
-            content={"ok": False, "namespace": getattr(req, "namespace", None) or getattr(req, "model", None), "error": str(e), "k": req.k},
-        )
+        results = search_vectors(req.namespace, req.vector, req.k, req.normalize)
+        return {"ok": True, "namespace": req.namespace, "k": req.k, "results": results}
     except Exception as e:
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={
-                "ok": False,
-                "namespace": getattr(req, "namespace", None) or getattr(req, "model", None),
-                "error": str(e) or "index_search_failed",
-                "k": req.k,
-            },
-        )
+        logger.error("vector_search_failed", namespace=req.namespace, error=str(e))
+        return JSONResponse(status_code=500, content={"ok": False, "namespace": req.namespace, "k": req.k, "error": str(e)})
 
+# ---------- System & Namespace Operations ----------
 
-# ---------- Namespace Management ----------
-@app.get("/v1/namespaces", response_model=NamespaceListResponse)
-def list_namespaces():
-    """List all available namespaces (collections)"""
+@app.post("/v1/namespaces/{namespace}/clear", response_model=StandardResponse)
+def api_clear_dataset(namespace: str):
+    """Wipes all vectors in a namespace but keeps the namespace ready for new data."""
     try:
-        result = idx.list_namespaces()
-        return NamespaceListResponse(**result)
+        clear_namespace_data(namespace)
+        return {"ok": True, "namespace": namespace, "message": "Dataset cleared."}
     except Exception as e:
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={"ok": False, "error": str(e), "namespaces": [], "count": 0}
-        )
+        logger.error("clear_dataset_failed", namespace=namespace, error=str(e))
+        return JSONResponse(status_code=500, content={"ok": False, "namespace": namespace, "error": str(e)})
 
-
-@app.delete("/v1/namespaces/{namespace}", response_model=NamespaceDeleteResponse)
-def delete_namespace(namespace: str):
-    """Delete a specific namespace (collection)"""
+@app.delete("/v1/namespaces/{namespace}", response_model=StandardResponse)
+def api_delete_namespace(namespace: str):
+    """Completely destroys the namespace/collection."""
     try:
-        result = idx.delete_namespace(namespace)
-        return NamespaceDeleteResponse(**result)
+        deleted = drop_namespace(namespace)
+        msg = "Namespace deleted." if deleted else "Namespace not found."
+        return {"ok": True, "namespace": namespace, "message": msg}
     except Exception as e:
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={"ok": False, "namespace": namespace, "deleted": False, "error": str(e)}
-        )
+        logger.error("delete_namespace_failed", namespace=namespace, error=str(e))
+        return JSONResponse(status_code=500, content={"ok": False, "namespace": namespace, "error": str(e)})
 
-
-@app.delete("/v1/namespaces", response_model=ClearAllResponse)
-def clear_all_data():
-    """Clear all data (drop all collections)"""
+@app.delete("/v1/system/clear-all", response_model=SystemClearResponse)
+def api_clear_system():
+    """DANGER: Destroys every collection in the Milvus database."""
     try:
-        result = idx.clear_all_data()
-        return ClearAllResponse(**result)
+        deleted, errors = clear_all_namespaces()
+        return {"ok": len(errors) == 0, "deleted_namespaces": deleted, "errors": errors}
     except Exception as e:
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=500,
-            content={"ok": False, "error": str(e), "deleted_namespaces": 0, "total_namespaces": 0}
-        )
+        logger.error("system_clear_failed", error=str(e))
+        return JSONResponse(status_code=500, content={"ok": False, "deleted_namespaces": 0, "errors": [str(e)]})
 
-
-# ---------- Entrypoint ----------
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8002, reload=False)
+    from app.config import PORT
+    uvicorn.run("app.main:app", host="0.0.0.0", port=PORT, reload=False)

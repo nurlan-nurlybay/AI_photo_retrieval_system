@@ -1,21 +1,21 @@
-from enum import Enum
+from pydantic import BaseModel, Field
 from typing import Annotated
-from pydantic import BaseModel, conlist, Field
 
-# ----- Batch text -----
+# ----- Text Query -----
 class TextRequest(BaseModel):
     texts: Annotated[list[str], Field(min_length=1, max_length=1024)]
 
+# ----- Fast Response (SigLIP) -----
 class VectorResponse(BaseModel):
-    # 512-d for ViT-B/32 and ViT-L/14
-    vectors: Annotated[list[list[float]], Field(min_length=512, max_length=512)]
+    # SigLIP-so400m outputs 1152-dimensional vectors
+    vectors: list[list[float]]
 
-# ----- Dynamic model/options -----
-class ModelName(str, Enum):
-    vit_b32 = "openai/clip-vit-base-patch32"
-    vit_l14 = "openai/clip-vit-large-patch14"
+# ----- Slow Response (Qwen + SigLIP Text Vector) -----
+class SlowEncodeResult(BaseModel):
+    description: str
+    tags: list[str]
+    text_vector: list[float]
 
-class EncodeOptions(BaseModel):
-    model: ModelName = ModelName.vit_b32
-    normalize: bool = True
-    quantize: bool = True
+class SlowEncodeResponse(BaseModel):
+    results: list[SlowEncodeResult]
+
