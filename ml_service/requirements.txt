@@ -1,16 +1,18 @@
 --extra-index-url https://download.pytorch.org/whl/cu128
 torch==2.11.0
 torchvision==0.26.0
-transformers==4.52.0
-accelerate==1.4.0
+python-multipart==0.0.22
+transformers==5.5.0
+accelerate==1.13.0
 bitsandbytes==0.49.2
 qwen-vl-utils==0.0.14
 fastapi==0.135.3
-uvicorn[standard]==0.32.0
-pydantic>=2.10.0
+uvicorn[standard]==0.42.0
+pydantic==2.12.5
 pillow==12.2.0
-numpy>=2.2.0
+numpy==2.4.4
 structlog==25.5.0
 prometheus-fastapi-instrumentator==7.1.0
 pytest==9.0.2
+pillow-heif==1.3.0
 

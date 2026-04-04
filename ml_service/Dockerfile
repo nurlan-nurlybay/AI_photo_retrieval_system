@@ -5,7 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_DEFAULT_TIMEOUT=180
+    PIP_DEFAULT_TIMEOUT=2000 \
+    HF_HOME=/app/data/huggingface
 
 WORKDIR /app
 
@@ -20,7 +21,8 @@ FROM base AS deps
 
 # Copy only requirements to leverage Docker cache
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Added explicit timeout flag here just to be absolutely bulletproof
+RUN pip install --default-timeout=2000 --no-cache-dir -r requirements.txt
 
 # --- Stage 3: Final image ---
 FROM base

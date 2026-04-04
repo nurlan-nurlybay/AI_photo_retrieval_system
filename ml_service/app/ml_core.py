@@ -1,113 +1,118 @@
+import os
+import re
 import json
 import torch
-import numpy as np
-import structlog
-from typing import List, Dict, Any, Optional
+import io
 from PIL import Image
-from io import BytesIO
+from typing import List, Dict, Any
+from pillow_heif import register_heif_opener
 from transformers import (
     AutoProcessor, 
     AutoModel, 
-    Qwen2VLForConditionalGeneration
+    Qwen3VLForConditionalGeneration, 
+    BitsAndBytesConfig
 )
 from qwen_vl_utils import process_vision_info
 
-logger = structlog.get_logger(__name__)
+register_heif_opener()
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-torch.set_float32_matmul_precision('high')
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
-SIGLIP_MODEL_ID = "google/siglip-2-so400m-384"
-QWEN_MODEL_ID = "Qwen/Qwen3-VL-8B-Instruct"
+SIGLIP_ID = "google/siglip2-so400m-patch14-384"
+QWEN_ID = "Qwen/Qwen3-VL-8B-Instruct"
 
-# Type as Any to stop strict linters from complaining about HF dynamic factory methods
-_siglip: Any = None
-_siglip_proc: Any = None
-_qwen: Any = None
-_qwen_proc: Any = None
+# Global placeholders
+siglip_processor: Any = None
+siglip_model: Any = None
+qwen_processor: Any = None
+qwen_model: Any = None
 
-def warmup() -> None:
-    global _siglip, _siglip_proc, _qwen, _qwen_proc
-    log = logger.bind(device=DEVICE)
-    try:
-        log.info("model_load_start", model=SIGLIP_MODEL_ID)
-        _siglip = AutoModel.from_pretrained(SIGLIP_MODEL_ID).to(DEVICE).eval()
-        _siglip_proc = AutoProcessor.from_pretrained(SIGLIP_MODEL_ID)
+def warmup():
+    """Bootstraps SigLIP only. Called by FastAPI lifespan."""
+    global siglip_processor, siglip_model
+    if siglip_model is None:
+        print(f"--- Warming up SigLIP 2 ({SIGLIP_ID}) ---")
+        siglip_processor = AutoProcessor.from_pretrained(SIGLIP_ID)
+        siglip_model = AutoModel.from_pretrained(SIGLIP_ID, attn_implementation="sdpa").to(device)
 
-        log.info("model_load_start", model=QWEN_MODEL_ID, quantization="4-bit")
-        _qwen = Qwen2VLForConditionalGeneration.from_pretrained(
-            QWEN_MODEL_ID, 
-            torch_dtype=torch.bfloat16, 
-            device_map="auto", 
-            load_in_4bit=True
-        ).eval()
-        _qwen_proc = AutoProcessor.from_pretrained(QWEN_MODEL_ID)
-        log.info("warmup_complete")
-    except Exception as e:
-        log.error("warmup_failed", error=str(e), exc_info=True)
-        raise
+def _load_qwen():
+    """Lazy-loads Qwen3 only when the slow path is hit."""
+    global qwen_processor, qwen_model
+    if qwen_model is None:
+        print(f"--- Lazy-loading Qwen 3 ({QWEN_ID}) ---")
+        quant_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
+        qwen_processor = AutoProcessor.from_pretrained(QWEN_ID)
+        qwen_model = Qwen3VLForConditionalGeneration.from_pretrained(
+            QWEN_ID, 
+            torch_dtype=torch.float16,
+            device_map={"": device}, 
+            quantization_config=quant_config, 
+            attn_implementation="sdpa"
+        )
 
-def _l2_norm(vecs: torch.Tensor) -> List[List[float]]:
-    normed = torch.nn.functional.normalize(vecs, p=2, dim=-1)
-    return normed.cpu().detach().numpy().tolist()
+def _l2_norm(tensor_obj):
+    """Safely extracts the tensor from HF wrappers and normalizes it."""
+    if not isinstance(tensor_obj, torch.Tensor):
+        if hasattr(tensor_obj, 'pooler_output') and tensor_obj.pooler_output is not None:
+            tensor_obj = tensor_obj.pooler_output
+        elif hasattr(tensor_obj, 'last_hidden_state') and tensor_obj.last_hidden_state is not None:
+            tensor_obj = tensor_obj.last_hidden_state.mean(dim=1)
+        else:
+            tensor_obj = tensor_obj[0]
+            
+    return (tensor_obj / tensor_obj.norm(dim=-1, keepdim=True)).cpu().tolist()
 
 def encode_text(texts: List[str]) -> List[List[float]]:
-    if _siglip is None or _siglip_proc is None:
-        raise RuntimeError("MLCore: SigLIP not initialized.")
+    if siglip_model is None: warmup()
+    inputs = siglip_processor(text=texts, padding="max_length", truncation=True, return_tensors="pt").to(device)
+    with torch.no_grad():
+        feat = siglip_model.get_text_features(**inputs)
+    return _l2_norm(feat)
+
+def encode_image_fast(images_bytes: List[bytes]) -> List[List[float]]:
+    if siglip_model is None: warmup()
+    vectors = []
+    for blob in images_bytes:
+        image = Image.open(io.BytesIO(blob)).convert('RGB')
+        inputs = siglip_processor(images=image, return_tensors="pt").to(device)
+        with torch.no_grad():
+            feat = siglip_model.get_image_features(**inputs)
+        vectors.append(_l2_norm(feat)[0])
+    return vectors
+
+def encode_image_slow(images_bytes: List[bytes]) -> List[Dict[str, Any]]:
+    _load_qwen()
+    assert qwen_model is not None and qwen_processor is not None
     
-    inputs = _siglip_proc(text=texts, padding="max_length", truncation=True, return_tensors="pt").to(DEVICE)
-    with torch.inference_mode():
-        features = _siglip.get_text_features(**inputs)
-    return _l2_norm(features)
-
-def encode_image_fast(images: List[bytes]) -> List[List[float]]:
-    if _siglip is None or _siglip_proc is None:
-        raise RuntimeError("MLCore: SigLIP not initialized.")
-        
-    pil_list = [Image.open(BytesIO(b)).convert("RGB") for b in images]
-    inputs = _siglip_proc(images=pil_list, padding=True, return_tensors="pt").to(DEVICE)
-    with torch.inference_mode():
-        features = _siglip.get_image_features(**inputs)
-    return _l2_norm(features)
-
-def encode_image_slow(images: List[bytes]) -> List[Dict[str, Any]]:
-    if _qwen is None or _qwen_proc is None:
-        raise RuntimeError("MLCore: Qwen3-VL not initialized.")
-
     results = []
-    pil_images = [Image.open(BytesIO(b)).convert("RGB") for b in images]
-    
-    for i, img in enumerate(pil_images):
-        log = logger.bind(batch_index=i, resolution=img.size)
-        try:
-            messages = [{"role": "user", "content": [
-                {"type": "image", "image": img},
-                {"type": "text", "text": "Describe this image and list 10 tags. Format as JSON: {'description': '...', 'tags': []}"}
-            ]}]
+    for blob in images_bytes:
+        image = Image.open(io.BytesIO(blob)).convert('RGB')
+        messages = [{"role": "user", "content": [
+            {"type": "image", "image": image}, 
+            {"type": "text", "text": 'Provide a description and 10 tags. Output ONLY a valid JSON object matching exactly this schema: {"description": "...", "tags": ["tag1", "tag2"]}.'}
+        ]}]
+        
+        prompt = qwen_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
+        image_inputs, *_ = process_vision_info(messages)
+        inputs = qwen_processor(text=[prompt], images=image_inputs, return_tensors="pt").to(device)
+        
+        with torch.inference_mode():
+            output = qwen_model.generate(**inputs, max_new_tokens=600, do_sample=False)
             
-            text = _qwen_proc.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            
-            # FIXED: Expecting 2 values instead of 3
-            image_inputs, video_inputs, *rest = process_vision_info(messages) 
-            
-            inputs = _qwen_proc(text=[text], images=image_inputs, padding=True, return_tensors="pt").to(DEVICE)
-            
-            with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-                output = _qwen.generate(**inputs, max_new_tokens=400)
-            
-            decoded = _qwen_proc.batch_decode(output, skip_special_tokens=True)[0]
-            clean_json = decoded.replace("```json", "").replace("```", "").strip()
-            
-            parsed = json.loads(clean_json)
-            
-            semantic_payload = f"{parsed.get('description')} {' '.join(parsed.get('tags', []))}"
-            vec = encode_text([semantic_payload])[0]
-            
-            results.append({**parsed, "text_vector": vec})
-            log.info("image_processed")
-            
-        except Exception as e:
-            log.error("processing_error", error=str(e))
-            results.append({"description": "error", "tags": [], "text_vector": [0.0]*1152})
-            
+        generated_ids = output[0][inputs["input_ids"].shape[-1]:]
+        decoded = qwen_processor.decode(generated_ids, skip_special_tokens=True)
+        
+        cleaned = re.sub(r'<think>.*?</think>', '', decoded, flags=re.DOTALL)
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        metadata = json.loads(match.group(0)) if match else {"description": "error", "tags": []}
+
+        img_vec = encode_image_fast([blob])[0]
+        txt_vec = encode_text([metadata.get("description", "error")])[0]
+        
+        results.append({
+            "description": metadata.get("description", ""),
+            "tags": metadata.get("tags", []),
+            "image_vector": img_vec,
+            "text_vector": txt_vec
+        })
     return results

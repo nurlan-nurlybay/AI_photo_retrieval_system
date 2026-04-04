@@ -13,6 +13,7 @@ logger = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Warmup SigLIP so search/fast-path is ready immediately
     warmup()
     yield
 
