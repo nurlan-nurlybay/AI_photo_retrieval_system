@@ -4,4 +4,5 @@ python-multipart==0.0.22
 pillow==12.2.0
 pytest==9.0.2
 structlog==25.5.0
+prometheus-fastapi-instrumentator==7.1.0
 httpx
