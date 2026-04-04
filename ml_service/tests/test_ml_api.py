@@ -1,10 +1,24 @@
 import os
+import sys
+from unittest.mock import patch, MagicMock
+
+# =================================================================
+# 0. BYPASS HEAVY IMPORTS FOR CI/CD
+# =================================================================
+# We mock these libraries so Python doesn't crash when app.main 
+# tries to import ml_core.py in our GitHub Actions environment.
+sys.modules['torch'] = MagicMock()
+sys.modules['transformers'] = MagicMock()
+sys.modules['qwen_vl_utils'] = MagicMock()
+sys.modules['pillow_heif'] = MagicMock()
+
 import pytest
-from unittest.mock import patch
 from fastapi.testclient import TestClient
-from app.main import app
 import io
 from PIL import Image
+
+# Now it is safe to import the app
+from app.main import app
 
 client = TestClient(app)
 
@@ -78,3 +92,4 @@ def test_real_text_endpoint():
     response = client.post("/v1/encode/text/", json={"texts": ["A photo of a dog"]})
     assert response.status_code == 200
     assert len(response.json()["vectors"][0]) == 1152
+

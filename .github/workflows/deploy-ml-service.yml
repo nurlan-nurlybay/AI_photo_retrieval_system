@@ -21,18 +21,17 @@ jobs:
 
       # --- STEP B: Install Dependencies for Testing ---
       - name: Install Dependencies
+        working-directory: ./ml_service
         run: |
           python -m pip install --upgrade pip
-          pip install pytest httpx  # Add other light deps needed for unit tests
-          # Note: We don't install Torch/Transformers here because 
-          # GitHub runners don't have GPUs and it's too slow.
-          # We use "Mocks" in our tests.
+          pip install -r requirements-test.txt
 
       # --- STEP C: Run Tests ---
       - name: Run Pytest
+        working-directory: ./ml_service
         run: |
           # Only run unit tests that don't require a GPU
-          cd ml_service && python -m pytest tests/
+          python -m pytest tests/
 
       # --- STEP D: If tests pass, Log in & Build ---
       - name: Log in to Docker Hub
