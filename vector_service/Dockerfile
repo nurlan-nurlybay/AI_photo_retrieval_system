@@ -35,6 +35,9 @@ COPY --from=deps /usr/local/bin /usr/local/bin
 # Copy app source
 COPY app /app/app
 
+# Copy the weights file that was missing
+COPY production_weights.json /app/production_weights.json
+
 EXPOSE 8002
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002"]
 

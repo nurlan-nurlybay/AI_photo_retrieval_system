@@ -92,3 +92,35 @@ def search_collection(col_name: str, vector: list[float], k: int, is_text: bool)
     )
     return res[0] if res else []
 
+# --- DELETION ---
+
+def clear_namespace_data(namespace: str):
+    connect()
+    img_col = f"{namespace}_img"
+    txt_col = f"{namespace}_txt"
+    
+    with LOCK:
+        if utility.has_collection(img_col):
+            utility.drop_collection(img_col)
+            _collections.pop(img_col, None)
+        if utility.has_collection(txt_col):
+            utility.drop_collection(txt_col)
+            _collections.pop(txt_col, None)
+
+def clear_all_namespaces() -> tuple[int, list]:
+    connect()
+    deleted = 0
+    errors = []
+    
+    with LOCK:
+        try:
+            collections = utility.list_collections()
+            for col in collections:
+                utility.drop_collection(col)
+                _collections.pop(col, None)
+                deleted += 1
+        except Exception as e:
+            errors.append(str(e))
+            
+    return deleted, errors
+

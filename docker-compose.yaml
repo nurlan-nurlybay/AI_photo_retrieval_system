@@ -60,7 +60,10 @@ services:
     networks: [clip-net]
 
   ml_service:
-    build: ./ml_service
+    build: 
+      context: ./ml_service
+      args:
+        - HF_TOKEN=${HF_TOKEN}
     container_name: ml-service
     ports:
       - "8005:8003"
@@ -71,8 +74,9 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    volumes:
-      - ./data:/app/data
+    environment:
+      - HF_HOME=/app/models
+      - HF_TOKEN=${HF_TOKEN}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8003/healthz"]
       interval: 30s
@@ -87,7 +91,7 @@ services:
     expose: ["8002"]
     ports: ["8006:8002"]
     depends_on:
-      milvus:  # <--- FIXED: Removed the dash (-) here
+      milvus:
         condition: service_healthy
     networks: [clip-net]
 
@@ -146,3 +150,4 @@ networks:
 
 volumes:
   redis-data:
+
