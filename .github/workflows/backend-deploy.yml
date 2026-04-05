@@ -49,8 +49,13 @@ jobs:
           echo "ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}" >> .env
           echo "AWS_S3_BUCKET=${{ secrets.S3_BUCKET_NAME }}" >> .env
 
-      - name: Build Docker Image (Dry Run)
+      - name: Build and Push Docker Image to ECR
         if: success()
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_BACKEND_REPO }}
+          IMAGE_TAG: latest
         working-directory: ./backend
         run: |
-          docker build -t backend-api:latest .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
