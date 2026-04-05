@@ -120,15 +120,12 @@ func (m *mockMetaExtractor) Extract(_ []byte) (ExtractedMetadata, error) {
 	}, nil
 }
 
-type mockVectorIndex struct{}
+type mockVectorClient struct{}
 
-func (m *mockVectorIndex) Search(_ context.Context, _ int64, _ []float32, _ int) ([]SearchResult, error) {
-	return nil, nil
+func (m *mockVectorClient) SearchHybrid(_ context.Context, _ string, _ string, _ []float32, _ []float32, _ int) ([]SearchResult, bool, error) {
+	return nil, false, nil
 }
-func (m *mockVectorIndex) Insert(_ context.Context, _, _ int64, _ []float32) error {
-	return nil
-}
-func (m *mockVectorIndex) Delete(_ context.Context, _ int64) error {
+func (m *mockVectorClient) DeleteImage(_ context.Context, _ string, _ int64) error {
 	return nil
 }
 
@@ -144,7 +141,7 @@ func newTestService(store *mockStorage, repo *mockRepo) (*mediaService, *mockSto
 	q := &mockQueue{}
 	log := logger.New(logger.Config{Level: "debug", Format: "text", SourceFolder: "test"})
 	svc := &mediaService{
-		vectorIndex: &mockVectorIndex{},
+		vectorClient: &mockVectorClient{},
 		repo:        repo,
 		store:       store,
 		queue:       q,
@@ -184,7 +181,7 @@ func TestUploadBatch_SingleImage_Success(t *testing.T) {
 	assert.True(t, strings.HasSuffix(store.putCalls[0].key, "/original.jpg"), "first put should be original")
 	assert.True(t, strings.HasSuffix(store.putCalls[1].key, "/thumb.jpg"), "second put should be thumb")
 
-	// Verify embed job was enqueued
+	// Verify embed job was enqueued (fast only)
 	assert.Len(t, q.enqueued, 1)
 }
 

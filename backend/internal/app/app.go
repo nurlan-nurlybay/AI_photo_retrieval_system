@@ -64,14 +64,9 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	}
 	log.Info("connected to CLIP client", cfg.Clip.Host, cfg.Clip.Port)
 
-	// Since we migrated from raw FAISS to HTTP endpoints over Vector Service
-	vectorSvcHost := os.Getenv("VECTOR_SERVICE_URL")
-	if vectorSvcHost == "" {
-		vectorSvcHost = "http://vector-service:8006"
-	}
-	
-	vectorClient := vector.NewClient(vector.Config{URL: vectorSvcHost}, httpClient)
-	log.Info("connected to Vector Service HTTP client", "url", vectorSvcHost)
+	vectorSvcURL := fmt.Sprintf("http://%s:%d", cfg.Faiss.Host, cfg.Faiss.Port)
+	vectorClient := vector.NewClient(vector.Config{URL: vectorSvcURL}, httpClient)
+	log.Info("connected to Vector Service HTTP client", "url", vectorSvcURL)
 
 	redisClient, err := redisadapter.NewClient(ctx, cfg)
 	if err != nil {

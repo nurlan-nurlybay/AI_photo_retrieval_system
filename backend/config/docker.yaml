@@ -13,17 +13,20 @@ postgres:
   user: "postgres"
   password: "postgres"
   dbname: "media"
+  sslmode: "disable"
   maxOpenConns: 25
   maxIdleConns: 5
-  connMaxLifetime: "5m"
+  connMaxLifetime: "1h"
+  connMaxIdleTime: "10m"
+  healthCheckPeriod: "5m"
 
 redis:
   addr: "redis:6379"
   password: ""
   db: 0
-  dialTimeout: 2s
-  readTimeout: 1s
-  writeTimeout: 1s
+  dialTimeout: "5s"
+  readTimeout: "3s"
+  writeTimeout: "3s"
   poolSize: 10
 
 seaweedfs:
@@ -39,6 +42,6 @@ faiss:
   port: 8002
 
 log:
-  level: "info" # "info", "debug", "warn", "error"
-  format: "json" # "json", "text"
+  level: "info"
+  format: "json"
   sourceFolder: "backend"

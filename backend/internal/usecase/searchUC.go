@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
@@ -51,10 +52,11 @@ func (s *searchService) SearchByText(ctx context.Context, userID int64, text str
 		return nil, false, err
 	}
 
-	// Assuming namespace convention is user ID as string inside vectorClient
-	namespace := "nurlan_gallery_batch" // TODO: dynamically map to fmt.Sprintf("user_%d", userID) once frontend drops dummy data
+	namespace := fmt.Sprintf("user_%d", userID)
 
-	results, usedQwen, err := s.vectorClient.SearchHybrid(ctx, namespace, text, nil, embedding, k)
+	// SigLIP text vectors live in the same embedding space as image vectors,
+	// so pass the text embedding as imageVec for baseline search.
+	results, usedQwen, err := s.vectorClient.SearchHybrid(ctx, namespace, text, embedding, nil, k)
 	if err != nil {
 		return nil, false, err
 	}
@@ -84,7 +86,7 @@ func (s *searchService) SearchByImage(ctx context.Context, userID int64, img []b
 		return nil, false, err
 	}
 
-	namespace := "nurlan_gallery_batch"
+	namespace := fmt.Sprintf("user_%d", userID)
 
 	results, usedQwen, err := s.vectorClient.SearchHybrid(ctx, namespace, "", embedding, nil, k)
 	if err != nil {

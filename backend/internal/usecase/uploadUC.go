@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
@@ -170,36 +172,23 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 		mediaID, err := s.repo.Create(ctx, m)
 		if err != nil {
 			s.log.ErrorContext(ctx, "failed to persist media", "index", i, "error", err)
-			_ = s.store.Delete(ctx, m.URL)
-			_ = s.store.Delete(ctx, m.ThumbURL)
+			_ = s.store.Delete(ctx, keyOrig)
+			_ = s.store.Delete(ctx, keyThumb)
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
 			continue
 		}
+		m.ID = mediaID
 
-		// enqueue fast job
-		fastJob := ucdto.EmbedJob{
+		job := ucdto.EmbedJob{
 			UserID:   m.UserID,
 			MediaID:  mediaID,
 			Modality: "image",
 		}
-		bf, _ := json.Marshal(fastJob)
-		if err := s.queue.Enqueue(ctx, "jobs:fast_queue", bf); err != nil {
-			s.log.ErrorContext(ctx, "failed to enqueue fast job", "media_id", m.ID, "error", err)
+		b, _ := json.Marshal(job)
+		if err := s.queue.Enqueue(ctx, "jobs:fast_queue", b); err != nil {
+			s.log.ErrorContext(ctx, "failed to enqueue embed job", "media_id", m.ID, "error", err)
 		} else {
-			s.log.DebugContext(ctx, "fast job enqueued", "media_id", m.ID)
-		}
-
-		// enqueue slow job
-		slowJob := ucdto.EmbedJob{
-			UserID:   m.UserID,
-			MediaID:  mediaID,
-			Modality: "qwen",
-		}
-		bs, _ := json.Marshal(slowJob)
-		if err := s.queue.Enqueue(ctx, "jobs:slow_queue", bs); err != nil {
-			s.log.ErrorContext(ctx, "failed to enqueue slow job", "media_id", m.ID, "error", err)
-		} else {
-			s.log.DebugContext(ctx, "slow job enqueued", "media_id", m.ID)
+			s.log.DebugContext(ctx, "embed job enqueued", "media_id", m.ID)
 		}
 
 		out = append(out, ucdto.UploadResult{Status: ucdto.StatusSaved, Media: m})
@@ -216,11 +205,11 @@ func (s *mediaService) Delete(ctx context.Context, userID, mediaID int64) error 
 		return err
 	}
 
-	namespace := "nurlan_gallery_batch"
+	namespace := fmt.Sprintf("user_%d", userID)
 	_ = s.vectorClient.DeleteImage(ctx, namespace, mediaID)
 
-	_ = s.store.Delete(ctx, media.URL)
-	_ = s.store.Delete(ctx, media.ThumbURL)
+	_ = s.store.Delete(ctx, extractKey(media.URL))
+	_ = s.store.Delete(ctx, extractKey(media.ThumbURL))
 
 	_ = s.repo.Delete(ctx, userID, mediaID)
 
@@ -254,6 +243,14 @@ func (s *mediaService) List(
 		return nil, 0, err
 	}
 	return items, total, nil
+}
+
+func extractKey(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	return strings.TrimPrefix(u.Path, "/")
 }
 
 var _ MediaService = (*mediaService)(nil)
