@@ -20,6 +20,7 @@ type Queue interface {
 
 type Embedder interface {
 	EmbedImage(ctx context.Context, data []byte) ([]float32, error)
+	EmbedImageURL(ctx context.Context, url string) ([]float32, error)
 	// TODO: Add EmbedImageCaption/Qwen method once backend supports calling it
 }
 
@@ -29,7 +30,7 @@ type VectorClient interface {
 }
 
 type ObjectStorage interface {
-	Get(ctx context.Context, key string) ([]byte, error)
+	GeneratePresignedURL(ctx context.Context, key string, expiration time.Duration) (string, error)
 }
 
 type MediaRepo interface {
@@ -71,17 +72,22 @@ type EmbedWorker struct {
 }
 
 func (w *EmbedWorker) Run(ctx context.Context) error {
-	if w.FastQueueKey == "" {
-		w.FastQueueKey = "jobs:fast_queue"
-	}
-	if w.SlowQueueKey == "" {
-		w.SlowQueueKey = "jobs:slow_queue"
-	}
 	if w.IdleDelay <= 0 {
 		w.IdleDelay = 300 * time.Millisecond
 	}
 
-	w.Log.InfoContext(ctx, "worker started", "fast_queue", w.FastQueueKey, "slow_queue", w.SlowQueueKey)
+	var queues []string
+	if w.SlowQueueKey != "" {
+		queues = append(queues, w.SlowQueueKey)
+	}
+	if w.FastQueueKey != "" {
+		queues = append(queues, w.FastQueueKey)
+	}
+	if len(queues) == 0 {
+		queues = []string{"jobs:slow_queue", "jobs:fast_queue"} // Fallback
+	}
+
+	w.Log.InfoContext(ctx, "worker started", "queues", queues)
 	for {
 		select {
 		case <-ctx.Done():
@@ -90,7 +96,7 @@ func (w *EmbedWorker) Run(ctx context.Context) error {
 		default:
 		}
 
-		key, payload, err := w.Q.DequeueBlock(ctx, 10, w.SlowQueueKey, w.FastQueueKey) // Priotize slow queue natively by ordering
+		key, payload, err := w.Q.DequeueBlock(ctx, 10, queues...)
 		if err != nil {
 			w.Log.ErrorContext(ctx, "dequeue failed", "error", err)
 			time.Sleep(w.IdleDelay)
@@ -131,20 +137,20 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob, source
 		return fmt.Errorf("media not found: user=%d, media=%d", job.UserID, job.MediaID)
 	}
 
-	// Load bytes from storage
+	// Generate presigned URL for processing step
 	key, err := utils.ExtractS3Key(media.URL)
 	if err != nil {
 		return err
 	}
-	bytes, err := w.Storage.Get(ctx, key)
-	if err != nil || len(bytes) == 0 {
-		w.Log.ErrorContext(ctx, "failed to load media bytes", "media_id", job.MediaID, "error", err)
+	url, err := w.Storage.GeneratePresignedURL(ctx, key, 1*time.Hour)
+	if err != nil || url == "" {
+		w.Log.ErrorContext(ctx, "failed to generate presigned URL", "media_id", job.MediaID, "error", err)
 		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
 		return err
 	}
 
-	// Generate embedding vector (TODO: support Qwen text embedding generation dynamically)
-	vec32, err := w.Clip.EmbedImage(ctx, bytes)
+	// Generate embedding vector using the S3 link
+	vec32, err := w.Clip.EmbedImageURL(ctx, url)
 	if err != nil {
 		w.Log.ErrorContext(ctx, "embedding failed", "media_id", job.MediaID, "error", err)
 		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))

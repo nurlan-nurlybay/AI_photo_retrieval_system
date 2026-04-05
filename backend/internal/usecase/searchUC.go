@@ -1,8 +1,10 @@
 package usecase
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
@@ -17,6 +19,7 @@ type (
 	Embedder interface {
 		EmbedText(ctx context.Context, text string) ([]float32, error)
 		EmbedImage(ctx context.Context, data []byte) ([]float32, error)
+		EmbedImageURL(ctx context.Context, url string) ([]float32, error)
 	}
 
 	VectorClient interface {
@@ -34,14 +37,16 @@ type searchService struct {
 	mediaRepo    domain.MediaRepository
 	embedder     Embedder
 	vectorClient VectorClient
+	store        ObjectStorage
 	log          *logger.Logger
 }
 
-func NewSearchService(mediaRepo domain.MediaRepository, embedder Embedder, vectorClient VectorClient, log *logger.Logger) SearchService {
+func NewSearchService(mediaRepo domain.MediaRepository, embedder Embedder, vectorClient VectorClient, store ObjectStorage, log *logger.Logger) SearchService {
 	return &searchService{
 		mediaRepo:    mediaRepo,
 		embedder:     embedder,
 		vectorClient: vectorClient,
+		store:        store,
 		log:          log,
 	}
 }
@@ -81,7 +86,22 @@ func (s *searchService) SearchByText(ctx context.Context, userID int64, text str
 }
 
 func (s *searchService) SearchByImage(ctx context.Context, userID int64, img []byte, k int) ([]*domain.MediaWithScore, bool, error) {
-	embedding, err := s.embedder.EmbedImage(ctx, img)
+	// 1. Upload to temporary S3 location
+	key := fmt.Sprintf("temp/search/%d/%d.jpg", userID, time.Now().UnixNano())
+	_, err := s.store.Put(ctx, key, bytes.NewReader(img))
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to upload search image to temp storage: %w", err)
+	}
+	defer s.store.Delete(context.Background(), key) // ensure cleanup async and safely
+
+	// 2. Generate presigned URL
+	url, err := s.store.GeneratePresignedURL(ctx, key, 15*time.Minute)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to generate presigned URL for search image: %w", err)
+	}
+
+	// 3. Embed using URL
+	embedding, err := s.embedder.EmbedImageURL(ctx, url)
 	if err != nil {
 		return nil, false, err
 	}

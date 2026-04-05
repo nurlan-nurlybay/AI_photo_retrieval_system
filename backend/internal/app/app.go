@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -20,8 +21,8 @@ import (
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/worker"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/seaweedfs"
-
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/storage"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
 )
@@ -41,9 +42,13 @@ type App struct {
 
 func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, error) {
 	// Conn to DB
-	log.Info("loading Postgres", "DSN", cfg.Postgres.DSN())
+	postgresDSN := os.Getenv("POSTGRES_DSN")
+	if postgresDSN == "" {
+		postgresDSN = cfg.Postgres.DSN()
+	}
+	log.Info("loading Postgres", "DSN", postgresDSN)
 
-	dbClient := InitDB(ctx, cfg.Postgres.DSN())
+	dbClient := InitDB(ctx, postgresDSN)
 	mediaRepo := postgresadapter.NewMediaRepo(dbClient)
 	embeddingsRepo := postgresadapter.NewEmbeddingsRepo(dbClient)
 
@@ -58,27 +63,45 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	fmt.Println("httpClient", httpClient.Timeout)
 
 	// Prep dependencies
-	clipClient, err := clipadapter.NewClient(ctx, cfg.Clip, httpClient)
-	if err != nil {
-		log.Fatal("failed to conn clip:", err)
+	var clipClient usecase.Embedder
+	if mlURL := os.Getenv("ML_SERVICE_URL"); mlURL != "" {
+		clipClient = clipadapter.NewClientFromURL(mlURL, httpClient)
+		log.Info("connected to CLIP client via env", "url", mlURL)
+	} else {
+		var err error
+		clipClient, err = clipadapter.NewClient(ctx, cfg.Clip, httpClient)
+		if err != nil {
+			log.Fatal("failed to conn clip:", err)
+		}
+		log.Info("connected to CLIP client via config", "host", cfg.Clip.Host, "port", cfg.Clip.Port)
 	}
-	log.Info("connected to CLIP client", cfg.Clip.Host, cfg.Clip.Port)
 
-	vectorSvcURL := fmt.Sprintf("http://%s:%d", cfg.Faiss.Host, cfg.Faiss.Port)
+	vectorSvcURL := os.Getenv("VECTOR_SERVICE_URL")
+	if vectorSvcURL == "" {
+		vectorSvcURL = fmt.Sprintf("http://%s:%d", cfg.Faiss.Host, cfg.Faiss.Port)
+	}
 	vectorClient := vector.NewClient(vector.Config{URL: vectorSvcURL}, httpClient)
 	log.Info("connected to Vector Service HTTP client", "url", vectorSvcURL)
 
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		cfg.Redis.Addr = redisURL
+	}
 	redisClient, err := redisadapter.NewClient(ctx, cfg)
 	if err != nil {
 		log.Fatal("failed to conn redis:", err)
 	}
 	log.Info("connected to Redis client", "addr", cfg.Redis.Addr)
 
-	store, err := seaweedfs.NewSeaweedfs(ctx, cfg.Seaweedfs.BaseURL, cfg.Seaweedfs.PublicURL, httpClient)
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {
-		log.Fatal("failed to conn seaweedfs:", err)
+		log.Fatal("failed to load aws config:", err)
 	}
-	log.Info("connected to Seaweedfs client")
+	bucketName := os.Getenv("AWS_S3_BUCKET")
+	if bucketName == "" {
+		bucketName = "media"
+	}
+	store := storage.NewS3Client(awsCfg, bucketName)
+	log.Info("connected to S3 client", "bucket", bucketName)
 
 	// Image processing libs
 	// TODO: cfg for vips and exif
@@ -86,7 +109,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	metaExt := metadata.NewExifExtractor()
 
 	// Setup app services
-	searchSvc := usecase.NewSearchService(mediaRepo, clipClient, vectorClient, log)
+	searchSvc := usecase.NewSearchService(mediaRepo, clipClient, vectorClient, store, log)
 	mediaSvc := usecase.NewMediaService(vectorClient, mediaRepo, store, redisClient, imgProc, metaExt, log)
 
 	// Setup workers
@@ -146,11 +169,37 @@ func (a *App) Run(ctx context.Context) error {
 		return nil
 	})
 
-	// EmbedWorker
-	g.Go(func() error {
-		a.Logger.Info("starting EmbedWorker")
-		return a.EmbedWorker.Run(ctx)
-	})
+	// EmbedWorker Pool
+	fastWorkers := 50
+	if val := os.Getenv("FAST_WORKER_COUNT"); val != "" {
+		if c, err := strconv.Atoi(val); err == nil {
+			fastWorkers = c
+		}
+	}
+	slowWorkers := 15
+	if val := os.Getenv("SLOW_WORKER_COUNT"); val != "" {
+		if c, err := strconv.Atoi(val); err == nil {
+			slowWorkers = c
+		}
+	}
+
+	a.Logger.Info("starting EmbedWorker pools", "fastWorkers", fastWorkers, "slowWorkers", slowWorkers)
+	for i := 0; i < fastWorkers; i++ {
+		g.Go(func() error {
+			ew := *a.EmbedWorker
+			ew.FastQueueKey = "jobs:fast_queue"
+			ew.SlowQueueKey = ""
+			return ew.Run(ctx)
+		})
+	}
+	for i := 0; i < slowWorkers; i++ {
+		g.Go(func() error {
+			ew := *a.EmbedWorker
+			ew.FastQueueKey = ""
+			ew.SlowQueueKey = "jobs:slow_queue"
+			return ew.Run(ctx)
+		})
+	}
 
 	// RetryWorker
 	g.Go(func() error {

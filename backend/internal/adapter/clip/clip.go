@@ -122,6 +122,47 @@ func (c *Client) EmbedImage(ctx context.Context, data []byte) ([]float32, error)
 	return respBody.Vectors[0], nil
 }
 
+func (c *Client) EmbedImageURL(ctx context.Context, imgUrl string) ([]float32, error) {
+	endpoint := c.baseURL + "/v1/encode/image/url/fast/"
+
+	reqBody := map[string]interface{}{
+		"urls": []string{imgUrl},
+	}
+
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("marshal failed: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("create req failed: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("post req failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("clip service returned %s: %s", resp.Status, string(bodyBytes))
+	}
+
+	var respBody clipdto.VectorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		return nil, fmt.Errorf("decode failed: %w", err)
+	}
+
+	if len(respBody.Vectors) == 0 || len(respBody.Vectors[0]) == 0 {
+		return nil, fmt.Errorf("empty vector response")
+	}
+
+	return respBody.Vectors[0], nil
+}
+
 func (c *Client) Ping(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/healthz", nil)
 	if err != nil {

@@ -2,22 +2,16 @@ name: ai-photo-retrieval
 
 services:
   api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ${ECR_BACKEND_REPO}:latest
     container_name: backend-api
     command: [ "./photo-backend", "--config=/config/docker.yaml" ]
     ports:
-      - "8080:8080"
+      - "80:8080"
     depends_on:
       postgres:
         condition: service_started
       redis:
         condition: service_started
-      seaweedfs:
-        condition: service_started
-      ml_service:
-        condition: service_healthy
       vector_service:
         condition: service_started
     environment:
@@ -25,7 +19,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./backend/config:/config
+      - ./config:/config
     networks:
       - clip-net
 
@@ -42,20 +36,6 @@ services:
       - ./volumes/pg:/var/lib/postgresql/data
     networks: [ clip-net ]
 
-  seaweedfs:
-    image: chrislusf/seaweedfs:latest
-    container_name: seaweedfs
-    command: "server -dir=/data -volume.max=10 -filer -s3"
-    user: "0:0"
-    ports:
-      - "9333:9333" # master
-      - "8888:8888" # filer (HTTP file API)
-      - "8333:8333" # S3 gateway
-      - "18080:18080" # volume UI
-    volumes:
-      - ./seaweed-data:/data
-    networks: [ clip-net ]
-
   redis:
     image: redis:7
     container_name: redis
@@ -66,42 +46,16 @@ services:
       - redis-data:/data
     networks: [ clip-net ]
 
-  ml_service:
-    build:
-      context: ./ml_service
-      args:
-        - HF_TOKEN=${HF_TOKEN}
-    container_name: ml-service
-    ports:
-      - "8005:8003"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [ gpu ]
-    environment:
-      - HF_HOME=/app/models
-      - HF_TOKEN=${HF_TOKEN}
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8003/healthz" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - clip-net
-
   vector_service:
-    build: ./vector_service
+    image: ${ECR_VECTOR_REPO}:latest
     container_name: vector-service
     expose: [ "8002" ]
     ports: [ "8006:8002" ]
     environment:
-      - MILVUS_HOST=${MILVUS_HOST:-milvus-standalone}
-      - MILVUS_PORT=${MILVUS_PORT:-19530}
-      - VECTOR_DIM=${VECTOR_DIM:-1152}
-      - PORT=${PORT:-8002}
+      - MILVUS_HOST=milvus-standalone
+      - MILVUS_PORT=19530
+      - VECTOR_DIM=1152
+      - PORT=8002
     depends_on:
       milvus:
         condition: service_healthy
@@ -163,5 +117,3 @@ networks:
 
 volumes:
   redis-data:
-
-

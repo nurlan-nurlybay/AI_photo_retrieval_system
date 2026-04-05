@@ -28,6 +28,7 @@ type (
 	ObjectStorage interface {
 		Put(ctx context.Context, key string, r *bytes.Reader) (publicURL string, err error)
 		Delete(ctx context.Context, key string) error
+		GeneratePresignedURL(ctx context.Context, key string, expiration time.Duration) (string, error)
 	}
 
 	ImageProcessor interface {

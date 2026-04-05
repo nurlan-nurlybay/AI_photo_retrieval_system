@@ -1,11 +1,12 @@
 import time
+import requests
 import structlog
 from contextlib import asynccontextmanager
 from typing import List
 from fastapi import FastAPI, Request, UploadFile, File
 from prometheus_fastapi_instrumentator import Instrumentator
 
-from .models import TextRequest, VectorResponse, SlowEncodeResponse
+from .models import TextRequest, VectorResponse, SlowEncodeResponse, ImageURLRequest
 from .ml_core import warmup, encode_image_slow, encode_image_fast, encode_text
 
 structlog.configure(processors=[structlog.processors.JSONRenderer()])
@@ -42,6 +43,15 @@ def fast_path(files: List[UploadFile] = File(...)):
 def slow_path(files: List[UploadFile] = File(...)):
     blobs = [f.file.read() for f in files]
     return {"results": encode_image_slow(blobs)}
+
+@app.post("/v1/encode/image/url/fast/", response_model=VectorResponse)
+def url_fast_path(req: ImageURLRequest):
+    blobs = []
+    for url in req.urls:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        blobs.append(response.content)
+    return {"vectors": encode_image_fast(blobs)}
 
 @app.get("/healthz")
 def healthz(): 

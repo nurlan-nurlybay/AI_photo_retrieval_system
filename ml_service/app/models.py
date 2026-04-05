@@ -19,3 +19,6 @@ class SlowEncodeResult(BaseModel):
 class SlowEncodeResponse(BaseModel):
     results: list[SlowEncodeResult]
 
+# ----- S3 URL Request -----
+class ImageURLRequest(BaseModel):
+    urls: list[str]

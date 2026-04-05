@@ -48,6 +48,10 @@ func (m *mockStorage) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+func (m *mockStorage) GeneratePresignedURL(ctx context.Context, key string, expiration time.Duration) (string, error) {
+	return fmt.Sprintf("http://seaweed:8888/%s?expires=%v", key, expiration), nil
+}
+
 type mockRepo struct {
 	getByChecksumFn func(ctx context.Context, userID int64, checksum string) (*domain.Media, error)
 	createFn        func(ctx context.Context, m *domain.Media) (int64, error)
