@@ -31,6 +31,7 @@ const (
 	OrientCol    = "orientation"
 	CreatedAtCol = "created_at"
 	LocalPathCol = "local_path"
+	StatusCol    = "status"
 )
 
 var _ domain.MediaRepository = (*MediaRepo)(nil)
@@ -54,14 +55,14 @@ func (r *MediaRepo) Create(ctx context.Context, m *domain.Media) (int64, error) 
 		Columns(
 			UserIDCol, URLCol, ThumbURLCol, MimeTypeCol, SizeBytesCol,
 			ChecksumCol, CreatedAtCol, TakenAtCol, WidthCol, HeightCol,
-			MakeCol, ModelCol, SoftwareCol, OrientCol, LocalPathCol,
+			MakeCol, ModelCol, SoftwareCol, OrientCol, LocalPathCol, StatusCol,
 		).
 		Values(
 			m.UserID, m.URL, m.ThumbURL, m.MimeType, m.SizeBytes,
 			m.Checksum, m.CreatedAt, m.Metadata.DateTimeOriginal,
 			m.Metadata.Width, m.Metadata.Height,
 			m.Metadata.CameraMake, m.Metadata.CameraModel,
-			m.Metadata.Software, m.Metadata.Orientation, m.LocalPath,
+			m.Metadata.Software, m.Metadata.Orientation, m.LocalPath, m.Status,
 		).
 		Suffix("RETURNING id").
 		PlaceholderFormat(squirrel.Dollar).
@@ -96,7 +97,7 @@ func (r *MediaRepo) Get(ctx context.Context, userID, mediaID int64) (*domain.Med
 		Select(
 			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol, SizeBytesCol,
 			ChecksumCol, CreatedAtCol, TakenAtCol, OrientCol, WidthCol, HeightCol,
-			MakeCol, ModelCol, SoftwareCol, LocalPathCol,
+			MakeCol, ModelCol, SoftwareCol, LocalPathCol, StatusCol,
 		).
 		From(TableName).
 		Where(squirrel.Eq{IDCol: mediaID, UserIDCol: userID}).
@@ -120,7 +121,7 @@ func (r *MediaRepo) Get(ctx context.Context, userID, mediaID int64) (*domain.Med
 		&m.ID, &m.UserID, &m.URL, &m.ThumbURL, &m.MimeType, &m.SizeBytes,
 		&m.Checksum, &m.CreatedAt, &meta.DateTimeOriginal, &meta.Orientation,
 		&meta.Width, &meta.Height, &meta.CameraMake, &meta.CameraModel, &meta.Software,
-		&m.LocalPath,
+		&m.LocalPath, &m.Status,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -139,7 +140,7 @@ func (r *MediaRepo) GetByChecksum(ctx context.Context, userID int64, checksum st
 		Select(
 			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol, SizeBytesCol,
 			ChecksumCol, CreatedAtCol, TakenAtCol, WidthCol, HeightCol,
-			MakeCol, ModelCol, SoftwareCol, OrientCol, LocalPathCol,
+			MakeCol, ModelCol, SoftwareCol, OrientCol, LocalPathCol, StatusCol,
 		).
 		From(TableName).
 		Where(squirrel.Eq{UserIDCol: userID, ChecksumCol: checksum}).
@@ -163,7 +164,7 @@ func (r *MediaRepo) GetByChecksum(ctx context.Context, userID int64, checksum st
 		&m.ID, &m.UserID, &m.URL, &m.ThumbURL, &m.MimeType, &m.SizeBytes,
 		&m.Checksum, &m.CreatedAt, &meta.DateTimeOriginal, &meta.Width,
 		&meta.Height, &meta.CameraMake, &meta.CameraModel, &meta.Software,
-		&meta.Orientation, &m.LocalPath,
+		&meta.Orientation, &m.LocalPath, &m.Status,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -183,7 +184,7 @@ func (r *MediaRepo) List(ctx context.Context, f domain.MediaFilter, p domain.Pag
 			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol,
 			SizeBytesCol, ChecksumCol, CreatedAtCol, TakenAtCol,
 			WidthCol, HeightCol, MakeCol, ModelCol, SoftwareCol,
-			OrientCol, LocalPathCol,
+			OrientCol, LocalPathCol, StatusCol,
 		).
 		From(TableName).
 		PlaceholderFormat(squirrel.Dollar)
@@ -255,7 +256,7 @@ func (r *MediaRepo) List(ctx context.Context, f domain.MediaFilter, p domain.Pag
 			&m.SizeBytes, &m.Checksum, &m.CreatedAt,
 			&meta.DateTimeOriginal, &meta.Width, &meta.Height,
 			&meta.CameraMake, &meta.CameraModel, &meta.Software,
-			&meta.Orientation, &m.LocalPath,
+			&meta.Orientation, &m.LocalPath, &m.Status,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan media: %w", err)
 		}
@@ -327,6 +328,30 @@ func (r *MediaRepo) Delete(ctx context.Context, userID, id int64) error {
 
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("media not found or not owned by user %d", userID)
+	}
+
+	return nil
+}
+
+func (r *MediaRepo) UpdateStatus(ctx context.Context, userID, id int64, status string) error {
+	query, args, err := squirrel.
+		Update(TableName).
+		Set(StatusCol, status).
+		Where(squirrel.Eq{IDCol: id, UserIDCol: userID}).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build media update status: %w", err)
+	}
+
+	q := db.Query{
+		Name:     "MediaRepo.UpdateStatus",
+		QueryRaw: query,
+	}
+
+	_, err = r.db.DB().ExecContext(ctx, q, args...)
+	if err != nil {
+		return fmt.Errorf("exec media update status: %w", err)
 	}
 
 	return nil

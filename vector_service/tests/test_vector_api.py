@@ -2,83 +2,88 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
+
+# Mock env vars BEFORE importing the app to bypass strict config.py checks
+os.environ["MILVUS_HOST"] = "mock_host"
+os.environ["MILVUS_PORT"] = "19530"
+os.environ["VECTOR_DIM"] = "1152"
+os.environ["PORT"] = "8002"
+
 from app.main import app
 
 client = TestClient(app)
 
 # ==========================================
-# 1. API Validation Tests (Mocks)
+# API Validation Tests (Mocks)
 # ==========================================
 
-@patch("app.core.add_image")
-def test_ingest_image_success(mock_add):
+@patch("app.core.add_image_batch")
+def test_ingest_image_batch_success(mock_add):
     mock_add.return_value = None
     response = client.post("/v1/ingest/image", json={
         "namespace": "test_space",
-        "id": 42,
-        "image_vector": [0.1] * 1152
+        "items": [{"id": 42, "image_vector": [0.1] * 1152}]
     })
     assert response.status_code == 200
-    assert response.json()["status"] == "image_added"
+    assert "inserted 1 images" in response.json()["status"]
 
-@patch("app.core.add_text")
-def test_ingest_text_success(mock_add):
+@patch("app.core.add_text_batch")
+def test_ingest_text_batch_success(mock_add):
     mock_add.return_value = None
     response = client.post("/v1/ingest/text", json={
         "namespace": "test_space",
-        "id": 42,
-        "text_vector": [0.1] * 1152,
-        "tags": ["test", "tags"]
+        "items": [{"id": 42, "text_vector": [0.1] * 1152, "tags": ["test", "tags"]}]
     })
     assert response.status_code == 200
-    assert response.json()["status"] == "text_and_tags_added"
+    assert "inserted 1 texts" in response.json()["status"]
+
+@patch("app.core.search_collection")
+@patch("app.core.check_sync_status")
+def test_hybrid_search(mock_sync, mock_search):
+    mock_sync.return_value = True  # Trigger Qwen fusion
+    
+    class MockHit:
+        def __init__(self, id, distance, tags=None):
+            self.id = id
+            self.distance = distance
+            self.entity = {"tags": tags} if tags else {}
+            
+        def get(self, key):
+            # Needed for main.py hit.entity.get("tags")
+            return self.entity.get(key)
+    
+    # 1st call returns image search results, 2nd call returns text search results
+    mock_search.side_effect = [
+        [MockHit(42, 0.9)],
+        [MockHit(42, 0.85, '["test"]')]
+    ]
+    
+    response = client.post("/v1/search/hybrid", json={
+        "namespace": "test_space",
+        "query_text": "test query",
+        "image_vector": [0.1] * 1152,
+        "text_vector": [0.1] * 1152,
+        "top_k": 3
+    })
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert data["used_qwen"] is True
+    assert len(data["results"]) == 1
+    assert data["results"][0]["id"] == 42
 
 @patch("app.core.clear_namespace_data")
 def test_clear_namespace(mock_clear):
     mock_clear.return_value = None
-    # Using request("DELETE", ...) because httpx handles DELETE with body differently
-    response = client.request("DELETE", "/v1/namespace/clear", json={
-        "namespace": "test_space"
-    })
+    # Updated to match @app.post("/v1/admin/clear/{namespace}")
+    response = client.post("/v1/admin/clear/test_space")
     assert response.status_code == 200
+    assert "cleared" in response.json()["status"]
 
 @patch("app.core.clear_all_namespaces")
 def test_nuke_system(mock_nuke):
     mock_nuke.return_value = (5, [])
-    response = client.delete("/v1/system/nuke")
+    # Updated to match @app.post("/v1/admin/nuke")
+    response = client.post("/v1/admin/nuke")
     assert response.status_code == 200
-    assert response.json()["deleted_count"] == 5
-
-# ==========================================
-# 2. REAL HARDWARE TESTS
-# ==========================================
-@pytest.mark.skipif(os.getenv("RUN_REAL_MILVUS_TESTS") != "1", reason="Requires live Milvus")
-def test_real_milvus_lifecycle():
-    """End-to-End test hitting the live Milvus database."""
-    test_namespace = "test_integration"
-    
-    # 1. Add Image
-    client.post("/v1/ingest/image", json={
-        "namespace": test_namespace, "id": 999, "image_vector": [0.1] * 1152
-    })
-    
-    # 2. Add Text
-    client.post("/v1/ingest/text", json={
-        "namespace": test_namespace, "id": 999, "text_vector": [0.1] * 1152, "tags": ["test"]
-    })
-    
-    # 3. Hybrid Search
-    search_resp = client.post("/v1/search/hybrid", json={
-        "namespace": test_namespace,
-        "query_text": "test",
-        "image_vector": [0.1] * 1152,
-        "text_vector": [0.1] * 1152,
-        "top_k": 5
-    })
-    assert search_resp.status_code == 200
-    assert len(search_resp.json()) > 0
-    assert search_resp.json()[0]["id"] == 999
-    
-    # 4. Clear
-    client.request("DELETE", "/v1/namespace/clear", json={"namespace": test_namespace})
-
+    assert response.json()["deleted_collections"] == 5

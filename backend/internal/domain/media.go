@@ -15,6 +15,7 @@ type Media struct {
 	Checksum  string // e.g. SHA256 for dedup
 	CreatedAt time.Time
 	LocalPath string
+	Status    string
 	Metadata  Metadata
 }
 
@@ -30,8 +31,9 @@ type Metadata struct {
 
 // Return response
 type MediaWithScore struct {
-	Media *Media
-	Score float32
+	Media    *Media
+	Score    float32
+	UsedQwen bool
 }
 
 // Query helpers

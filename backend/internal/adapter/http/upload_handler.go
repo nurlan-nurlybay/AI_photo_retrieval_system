@@ -125,6 +125,7 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 				Width:     item.Metadata.Width,
 				Height:    item.Metadata.Height,
 				Checksum:  item.Checksum,
+				Status:    item.Status,
 			}
 			if !item.CreatedAt.IsZero() {
 				ui.CreatedAt = item.CreatedAt.UTC().Format(time.RFC3339)
@@ -240,6 +241,7 @@ func (h *ImageHandler) ListUserImages(c *gin.Context) {
 			TakenAt:   takenAt,
 			CreatedAt: createdAt,
 			LocalPath: m.LocalPath,
+			Status:    m.Status,
 		})
 	}
 	resp.Total = total
@@ -282,6 +284,7 @@ func (h *ImageHandler) GetUserImage(c *gin.Context) {
 		TakenAt:   takenAt,
 		CreatedAt: createdAt,
 		LocalPath: m.LocalPath,
+		Status:    m.Status,
 	}
 
 	c.JSON(http.StatusOK, resp)

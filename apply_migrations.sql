@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS media (
     camera_model    TEXT,
     software        TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    status          TEXT        NOT NULL DEFAULT 'pending',
 
     CONSTRAINT media_user_checksum_uniq UNIQUE (user_id, checksum)
 );

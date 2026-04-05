@@ -1,4 +1,4 @@
-FROM python:3.11-slim AS base
+FROM python:3.11-bookworm AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -28,7 +28,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
 # --- Stage 3: Final image ---
 FROM base
 
-# Copy installed packages only (so final image is smaller)
+# Copy installed packages only
 COPY --from=deps /usr/local/lib/python3.11 /usr/local/lib/python3.11
 COPY --from=deps /usr/local/bin /usr/local/bin
 
@@ -40,4 +40,3 @@ COPY production_weights.json /app/production_weights.json
 
 EXPOSE 8002
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002"]
-

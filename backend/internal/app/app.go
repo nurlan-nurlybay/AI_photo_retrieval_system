@@ -11,12 +11,12 @@ import (
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	clipadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/clip"
-	faissadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss"
 	httpadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/http"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/imageproc"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/metadata"
 	postgresadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/postgres"
 	redisadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/redis"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/vector"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/worker"
 	"golang.org/x/sync/errgroup"
 
@@ -64,11 +64,14 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	}
 	log.Info("connected to CLIP client", cfg.Clip.Host, cfg.Clip.Port)
 
-	faissClient, err := faissadapter.NewClient(ctx, cfg.Faiss, httpClient)
-	if err != nil {
-		log.Fatal("failed to conn faiss:", err)
+	// Since we migrated from raw FAISS to HTTP endpoints over Vector Service
+	vectorSvcHost := os.Getenv("VECTOR_SERVICE_URL")
+	if vectorSvcHost == "" {
+		vectorSvcHost = "http://vector-service:8006"
 	}
-	log.Info("connected to FAISS client", cfg.Faiss.Host, cfg.Faiss.Port)
+	
+	vectorClient := vector.NewClient(vector.Config{URL: vectorSvcHost}, httpClient)
+	log.Info("connected to Vector Service HTTP client", "url", vectorSvcHost)
 
 	redisClient, err := redisadapter.NewClient(ctx, cfg)
 	if err != nil {
@@ -88,8 +91,8 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	metaExt := metadata.NewExifExtractor()
 
 	// Setup app services
-	searchSvc := usecase.NewSearchService(mediaRepo, clipClient, faissClient, log)
-	mediaSvc := usecase.NewMediaService(faissClient, mediaRepo, store, redisClient, imgProc, metaExt, log)
+	searchSvc := usecase.NewSearchService(mediaRepo, clipClient, vectorClient, log)
+	mediaSvc := usecase.NewMediaService(vectorClient, mediaRepo, store, redisClient, imgProc, metaExt, log)
 
 	// Setup workers
 	ew := &worker.EmbedWorker{
@@ -98,24 +101,25 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 		MediaRepo:      mediaRepo,
 		Storage:        store,
 		Clip:           clipClient,
-		Faiss:          faissClient,
+		Vector:         vectorClient,
 		ModelID:        "open_clip:ViT-L/14@336px",
-		QueueKey:       "jobs:embed",
+		FastQueueKey:   "jobs:fast_queue",
+		SlowQueueKey:   "jobs:slow_queue",
 		IdleDelay:      2 * time.Second,
 		Log:            log,
 	}
 	rw := &worker.RetryWorker{
 		EmbeddingsRepo:          embeddingsRepo,
-		Faiss:                   faissClient,
+		VectorClient:            vectorClient,
 		Queue:                   redisClient,
-		QueueKey:                "jobs:embed",
+		QueueKey:                "jobs:fast_queue",
 		Interval:                30 * time.Second,
 		Batch:                   500,
 		AlreadyExistsSubstrings: []string{"already exists", "duplicate id"},
 	}
 
 	// Wire handlers
-	router := httpadapter.SetupRoutes(searchSvc, mediaSvc, log)
+	router := httpadapter.SetupRoutes(redisClient, searchSvc, mediaSvc, log)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", cfg.HTTP.Host, cfg.HTTP.Port),

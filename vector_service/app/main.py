@@ -1,83 +1,68 @@
-import json
-from fastapi import FastAPI
-from app.models import SearchRequest, AddImageRequest, AddTextRequest, NamespaceRequest
-from app.reranker import ranker # Your existing w1, w2, w3 logic
+import asyncio
+from functools import partial
+from fastapi import FastAPI, HTTPException
+from app.models import AddImageBatchRequest, AddTextBatchRequest, SearchRequest
 from app import core
+from app.reranker import ranker
+import json
 
-app = FastAPI()
+app = FastAPI(title="Vector Service API")
 
 @app.post("/v1/ingest/image")
-async def ingest_image(req: AddImageRequest):
-    core.add_image(req.namespace, req.id, req.image_vector)
-    return {"ok": True, "status": "image_added"}
+async def ingest_image(req: AddImageBatchRequest):
+    items = [{"id": item.id, "image_vector": item.image_vector} for item in req.items]
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, partial(core.add_image_batch, req.namespace, items))
+    return {"ok": True, "status": f"inserted {len(items)} images"}
 
 @app.post("/v1/ingest/text")
-async def ingest_text(req: AddTextRequest):
-    core.add_text(req.namespace, req.id, req.text_vector, req.tags)
-    return {"ok": True, "status": "text_and_tags_added"}
+async def ingest_text(req: AddTextBatchRequest):
+    items = [{"id": item.id, "text_vector": item.text_vector, "tags": item.tags} for item in req.items]
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, partial(core.add_text_batch, req.namespace, items))
+    return {"ok": True, "status": f"inserted {len(items)} texts"}
 
 @app.post("/v1/search/hybrid")
-async def hybrid_search(req: SearchRequest):
-    is_synced = core.check_sync_status(req.namespace)
+async def search_hybrid(req: SearchRequest):
+    if not req.image_vector:
+        raise HTTPException(status_code=400, detail="image_vector is required for baseline search")
 
-    # 1. SEARCH IMAGES (Always happens)
-    img_hits = core.search_collection(
-        col_name=f"{req.namespace}_img", 
-        vector=req.image_vector, 
-        k=req.top_k * 2, 
-        is_text=False
-    )
+    # 1. Always do baseline image search
+    img_res = core.search_collection(f"{req.namespace}_img", req.image_vector, req.top_k * 2, is_text=False)
+    img_hits = [{"id": hit.id, "score": hit.distance} for hit in img_res]
+    
+    final_results = img_hits
+    used_qwen = False
 
-    # --- FALLBACK PATH (Async workers still processing) ---
-    if not is_synced:
-        print(f"[{req.namespace}] Async workers lagging. Falling back to Pure SigLIP.")
-        results = [{"id": hit.id, "score": hit.distance} for hit in img_hits]
-        # Just sort by raw image distance (1.0 weight)
-        results.sort(key=lambda x: x["score"], reverse=True)
-        return results[:req.top_k]
+    # 2. STRICT RULE: Only use Hybrid/Qwen if EVERY image in the namespace has a text vector
+    if req.text_vector and core.check_sync_status(req.namespace):
+        txt_res = core.search_collection(f"{req.namespace}_txt", req.text_vector, req.top_k * 2, is_text=True)
+        
+        if txt_res:
+            txt_hits = [{"id": hit.id, "score": hit.distance, "tags": json.loads(hit.entity.get("tags"))} for hit in txt_res]
+            
+            # Safely handle the Optional[str] to make the type checker happy
+            safe_query_text = req.query_text or ""
+            
+            final_results = ranker.rerank(safe_query_text, img_hits, txt_hits, top_k=req.top_k)
+            used_qwen = True
 
-    # --- HYBRID PATH (Dataset is fully processed) ---
-    print(f"[{req.namespace}] Dataset fully synced. Using w1, w2, w3 Hybrid Search.")
-    txt_hits = core.search_collection(
-        col_name=f"{req.namespace}_txt", 
-        vector=req.text_vector, 
-        k=req.top_k * 2, 
-        is_text=True
-    )
+    return {
+        "results": final_results[:req.top_k],
+        "used_qwen": used_qwen
+    }
 
-    combined_data = {}
-    for hit in img_hits:
-        combined_data[hit.id] = {"img_sim": hit.distance, "txt_sim": 0.0, "tags": []}
+@app.get("/v1/status/{namespace}")
+async def get_status(namespace: str):
+    is_synced = core.check_sync_status(namespace)
+    return {"namespace": namespace, "is_synced": is_synced}
 
-    for hit in txt_hits:
-        if hit.id in combined_data:
-            combined_data[hit.id]["txt_sim"] = hit.distance
-            # Deserialize tags from Milvus
-            combined_data[hit.id]["tags"] = json.loads(hit.entity.get("tags"))
-        else:
-            combined_data[hit.id] = {
-                "img_sim": 0.0, 
-                "txt_sim": hit.distance, 
-                "tags": json.loads(hit.entity.get("tags"))
-            }
+@app.post("/v1/admin/clear/{namespace}")
+async def clear_namespace(namespace: str):
+    core.clear_namespace_data(namespace)
+    return {"ok": True, "status": f"Namespace {namespace} cleared."}
 
-    final_rankings = []
-    for media_id, data in combined_data.items():
-        lex_score = ranker.calculate_lexical_score(req.query_text, data["tags"])
-        final_score = ranker.get_hybrid_score(data["img_sim"], data["txt_sim"], lex_score)
-        final_rankings.append({"id": media_id, "score": final_score})
-
-    final_rankings.sort(key=lambda x: x["score"], reverse=True)
-    return final_rankings[:req.top_k]
-
-
-@app.delete("/v1/namespace/clear")
-async def clear_namespace(req: NamespaceRequest):
-    core.clear_namespace_data(req.namespace)
-    return {"ok": True, "status": f"Namespace {req.namespace} cleared"}
-
-
-@app.delete("/v1/system/nuke")
+@app.post("/v1/admin/nuke")
 async def nuke_system():
     deleted, errors = core.clear_all_namespaces()
-    return {"ok": True, "deleted_count": deleted, "errors": errors}
+    return {"ok": True, "deleted_collections": deleted, "errors": errors}

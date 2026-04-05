@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/vector"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
 	ucdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase/dto"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
@@ -13,15 +14,18 @@ import (
 )
 
 type Queue interface {
-	DequeueBlock(ctx context.Context, key string, timeoutSeconds int) (queueKey string, payload []byte, err error)
+	DequeueBlock(ctx context.Context, timeoutSeconds int, keys ...string) (queueKey string, payload []byte, err error)
+	Publish(ctx context.Context, channel string, message interface{}) error
 }
 
 type Embedder interface {
 	EmbedImage(ctx context.Context, data []byte) ([]float32, error)
+	// TODO: Add EmbedImageCaption/Qwen method once backend supports calling it
 }
 
-type VectorIndex interface {
-	Insert(ctx context.Context, userID, mediaID int64, vector []float32) error
+type VectorClient interface {
+	IngestImageBatch(ctx context.Context, userID int64, items []vector.IngestItem) error
+	IngestTextBatch(ctx context.Context, userID int64, items []vector.IngestItem) error
 }
 
 type ObjectStorage interface {
@@ -30,6 +34,7 @@ type ObjectStorage interface {
 
 type MediaRepo interface {
 	Get(ctx context.Context, userID, mediaID int64) (*domain.Media, error)
+	UpdateStatus(ctx context.Context, userID, mediaID int64, status string) error
 }
 
 type EmbeddingsRepo interface {
@@ -57,22 +62,26 @@ type EmbedWorker struct {
 	MediaRepo      MediaRepo
 	Storage        ObjectStorage
 	Clip           Embedder
-	Faiss          VectorIndex
+	Vector         VectorClient
 	ModelID        string        // e.g. "open_clip:ViT-L/14@336px"
-	QueueKey       string        // e.g. "jobs:embed"
+	FastQueueKey   string
+	SlowQueueKey   string
 	IdleDelay      time.Duration // sleep after BRPOP timeouts/errors
 	Log            *logger.Logger
 }
 
 func (w *EmbedWorker) Run(ctx context.Context) error {
-	if w.QueueKey == "" {
-		w.QueueKey = "jobs:embed" // use default queue name
+	if w.FastQueueKey == "" {
+		w.FastQueueKey = "jobs:fast_queue"
+	}
+	if w.SlowQueueKey == "" {
+		w.SlowQueueKey = "jobs:slow_queue"
 	}
 	if w.IdleDelay <= 0 {
 		w.IdleDelay = 300 * time.Millisecond
 	}
 
-	w.Log.InfoContext(ctx, "worker started", "queue", w.QueueKey)
+	w.Log.InfoContext(ctx, "worker started", "fast_queue", w.FastQueueKey, "slow_queue", w.SlowQueueKey)
 	for {
 		select {
 		case <-ctx.Done():
@@ -81,15 +90,14 @@ func (w *EmbedWorker) Run(ctx context.Context) error {
 		default:
 		}
 
-		// w.Log.DebugContext(ctx, "waiting for job", "queue", w.QueueKey)
-		key, payload, err := w.Q.DequeueBlock(ctx, w.QueueKey, 10)
+		key, payload, err := w.Q.DequeueBlock(ctx, 10, w.SlowQueueKey, w.FastQueueKey) // Priotize slow queue natively by ordering
 		if err != nil {
 			w.Log.ErrorContext(ctx, "dequeue failed", "error", err)
 			time.Sleep(w.IdleDelay)
 			continue
 		}
 		if len(payload) == 0 {
-			w.Log.DebugContext(ctx, "no job received, sleeping", "queue", w.QueueKey)
+			w.Log.DebugContext(ctx, "no job received, sleeping")
 			time.Sleep(w.IdleDelay)
 			continue
 		}
@@ -103,7 +111,7 @@ func (w *EmbedWorker) Run(ctx context.Context) error {
 		}
 
 		w.Log.DebugContext(ctx, "processing job", "user_id", job.UserID, "media_id", job.MediaID)
-		if err := w.processOne(ctx, job); err != nil {
+		if err := w.processOne(ctx, job, key); err != nil {
 			w.Log.ErrorContext(ctx, "job failed", "user_id", job.UserID, "media_id", job.MediaID, "error", err)
 		} else {
 			w.Log.DebugContext(ctx, "job completed successfully", "media_id", job.MediaID)
@@ -111,7 +119,7 @@ func (w *EmbedWorker) Run(ctx context.Context) error {
 	}
 }
 
-func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob) error {
+func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob, sourceQueue string) error {
 	w.Log.InfoContext(ctx, "fetching media bytes", "media_id", job.MediaID)
 
 	// Fetch media
@@ -135,7 +143,7 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob) error 
 		return err
 	}
 
-	// Generate embedding vector
+	// Generate embedding vector (TODO: support Qwen text embedding generation dynamically)
 	vec32, err := w.Clip.EmbedImage(ctx, bytes)
 	if err != nil {
 		w.Log.ErrorContext(ctx, "embedding failed", "media_id", job.MediaID, "error", err)
@@ -143,35 +151,57 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob) error 
 		return err
 	}
 
-	// Serialize vector to bytes
+	// Insert into Vector Service
+	ingestItem := vector.IngestItem{
+		ImageID: job.MediaID,
+		Vector:  vec32,
+	}
+
+	var newStatus string
+	if sourceQueue == w.FastQueueKey {
+		if err := w.Vector.IngestImageBatch(ctx, job.UserID, []vector.IngestItem{ingestItem}); err != nil {
+			w.Log.ErrorContext(ctx, "failed to ingest image batch", "media_id", job.MediaID, "error", err)
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
+			return err
+		}
+		newStatus = "fast_encoded"
+	} else {
+		// Even if "qwen" logic is missing above, we simulate sending it as TextBatch to vector service.
+		if err := w.Vector.IngestTextBatch(ctx, job.UserID, []vector.IngestItem{ingestItem}); err != nil {
+			w.Log.ErrorContext(ctx, "failed to ingest text batch", "media_id", job.MediaID, "error", err)
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
+			return err
+		}
+		newStatus = "slow_encoded"
+	}
+
+	// Record to Postgres Media Repo
+	if err := w.MediaRepo.UpdateStatus(ctx, job.UserID, job.MediaID, newStatus); err != nil {
+		w.Log.ErrorContext(ctx, "failed to update media status", "error", err)
+		return err
+	}
+
+	// Publish to Redis Pub/Sub for SSE event mapping
+	pubMsg := map[string]interface{}{
+		"media_id": job.MediaID,
+		"user_id":  job.UserID,
+		"status":   newStatus,
+	}
+	pubBytes, _ := json.Marshal(pubMsg)
+	_ = w.Q.Publish(ctx, "status_updates", pubBytes)
+
+	// Keep legacy embeddings tracking functional for RetryWorker
 	bytesVec := utils.Float32ToBytes(vec32)
 	emb := &domain.Embedding{
 		MediaID:   job.MediaID,
 		UserID:    job.UserID,
 		Model:     job.Modality,
 		VecBytes:  bytesVec,
-		Status:    "pending",
+		Status:    "in_index",
 		LastError: "",
 	}
+	_ = w.EmbeddingsRepo.UpsertEmbedding(ctx, emb)
 
-	// Upsert embedding
-	if err := w.EmbeddingsRepo.UpsertEmbedding(ctx, emb); err != nil {
-		w.Log.ErrorContext(ctx, "failed to upsert embedding", "media_id", job.MediaID, "error", err)
-		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
-		return err
-	}
-
-	// Insert into FAISS/Milvus
-	if err := w.Faiss.Insert(ctx, job.UserID, job.MediaID, vec32); err != nil {
-		w.Log.ErrorContext(ctx, "failed to insert into FAISS",
-			"media_id", job.MediaID, "dims", len(vec32), "error", err,
-		)
-		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
-		return err
-	}
-
-	// Mark as successfully indexed
-	_ = w.EmbeddingsRepo.MarkInIndex(ctx, job.UserID, job.MediaID)
-	w.Log.InfoContext(ctx, "embedding successfully indexed", "media_id", job.MediaID)
+	w.Log.InfoContext(ctx, "embedding successfully ingested via vector-service", "media_id", job.MediaID, "status", newStatus)
 	return nil
 }

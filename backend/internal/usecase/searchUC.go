@@ -8,8 +8,8 @@ import (
 )
 
 type SearchService interface {
-	SearchByText(ctx context.Context, userID int64, text string, k int) ([]*domain.MediaWithScore, error)
-	SearchByImage(ctx context.Context, userID int64, img []byte, k int) ([]*domain.MediaWithScore, error)
+	SearchByText(ctx context.Context, userID int64, text string, k int) ([]*domain.MediaWithScore, bool, error)
+	SearchByImage(ctx context.Context, userID int64, img []byte, k int) ([]*domain.MediaWithScore, bool, error)
 }
 
 type (
@@ -18,10 +18,9 @@ type (
 		EmbedImage(ctx context.Context, data []byte) ([]float32, error)
 	}
 
-	VectorIndex interface {
-		Insert(ctx context.Context, userID, mediaId int64, vector []float32) error
-		Search(ctx context.Context, userID int64, vector []float32, k int) ([]SearchResult, error)
-		Delete(ctx context.Context, id int64) error
+	VectorClient interface {
+		SearchHybrid(ctx context.Context, namespace string, queryText string, imageVec []float32, textVec []float32, topK int) ([]SearchResult, bool, error)
+		DeleteImage(ctx context.Context, namespace string, imageID int64) error
 	}
 
 	SearchResult struct {
@@ -31,30 +30,33 @@ type (
 )
 
 type searchService struct {
-	mediaRepo   domain.MediaRepository
-	embedder    Embedder
-	vectorIndex VectorIndex
-	log         *logger.Logger
+	mediaRepo    domain.MediaRepository
+	embedder     Embedder
+	vectorClient VectorClient
+	log          *logger.Logger
 }
 
-func NewSearchService(mediaRepo domain.MediaRepository, embedder Embedder, vectorIndex VectorIndex, log *logger.Logger) SearchService {
+func NewSearchService(mediaRepo domain.MediaRepository, embedder Embedder, vectorClient VectorClient, log *logger.Logger) SearchService {
 	return &searchService{
-		mediaRepo:   mediaRepo,
-		embedder:    embedder,
-		vectorIndex: vectorIndex,
-		log:         log,
+		mediaRepo:    mediaRepo,
+		embedder:     embedder,
+		vectorClient: vectorClient,
+		log:          log,
 	}
 }
 
-func (s *searchService) SearchByText(ctx context.Context, userID int64, text string, k int) ([]*domain.MediaWithScore, error) {
+func (s *searchService) SearchByText(ctx context.Context, userID int64, text string, k int) ([]*domain.MediaWithScore, bool, error) {
 	embedding, err := s.embedder.EmbedText(ctx, text)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	results, err := s.vectorIndex.Search(ctx, userID, embedding, k)
+	// Assuming namespace convention is user ID as string inside vectorClient
+	namespace := "nurlan_gallery_batch" // TODO: dynamically map to fmt.Sprintf("user_%d", userID) once frontend drops dummy data
+
+	results, usedQwen, err := s.vectorClient.SearchHybrid(ctx, namespace, text, nil, embedding, k)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// Fetch media info and attach score
@@ -65,25 +67,28 @@ func (s *searchService) SearchByText(ctx context.Context, userID int64, text str
 			continue // skip missing media
 		}
 		out = append(out, &domain.MediaWithScore{
-			Media: media,
-			Score: r.Score,
+			Media:    media,
+			Score:    r.Score,
+			UsedQwen: usedQwen,
 		})
 	}
 
-	s.log.InfoContext(ctx, "search by text", "results", results)
+	s.log.InfoContext(ctx, "search by text", "results_count", len(results), "used_qwen", usedQwen)
 
-	return out, nil
+	return out, usedQwen, nil
 }
 
-func (s *searchService) SearchByImage(ctx context.Context, userID int64, img []byte, k int) ([]*domain.MediaWithScore, error) {
+func (s *searchService) SearchByImage(ctx context.Context, userID int64, img []byte, k int) ([]*domain.MediaWithScore, bool, error) {
 	embedding, err := s.embedder.EmbedImage(ctx, img)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	results, err := s.vectorIndex.Search(ctx, userID, embedding, k)
+	namespace := "nurlan_gallery_batch"
+
+	results, usedQwen, err := s.vectorClient.SearchHybrid(ctx, namespace, "", embedding, nil, k)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// Fetch media info and attach score
@@ -94,12 +99,13 @@ func (s *searchService) SearchByImage(ctx context.Context, userID int64, img []b
 			continue
 		}
 		out = append(out, &domain.MediaWithScore{
-			Media: media,
-			Score: r.Score,
+			Media:    media,
+			Score:    r.Score,
+			UsedQwen: usedQwen,
 		})
 	}
 
-	s.log.InfoContext(ctx, "search by image", "results", results)
+	s.log.InfoContext(ctx, "search by image", "results_count", len(results), "used_qwen", usedQwen)
 
-	return out, nil
+	return out, usedQwen, nil
 }

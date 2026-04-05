@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/vector"
 	ucdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase/dto"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/utils"
 )
@@ -12,7 +13,7 @@ import (
 // sweep pending/failed, replay to FAISS, set status
 type RetryWorker struct {
 	EmbeddingsRepo EmbeddingsRepo
-	Faiss          VectorIndex
+	VectorClient   VectorClient
 	Interval       time.Duration // e.g. 1 * time.Second
 	Batch          int           // e.g. 500
 
@@ -57,7 +58,12 @@ func (w *RetryWorker) step(ctx context.Context) {
 			}
 			vec := utils.BytesToFloat32(vb)
 
-			if err := w.Faiss.Insert(ctx, 404, mediaID, vec); err != nil {
+			// Assuming retry hits the Image Ingest endpoint for now
+			item := vector.IngestItem{
+				ImageID: mediaID,
+				Vector:  vec,
+			}
+			if err := w.VectorClient.IngestImageBatch(ctx, 404, []vector.IngestItem{item}); err != nil {
 				if isAlreadyExists(err, w.AlreadyExistsSubstrings) {
 					_ = w.EmbeddingsRepo.MarkInIndex(ctx, 404, mediaID)
 					continue

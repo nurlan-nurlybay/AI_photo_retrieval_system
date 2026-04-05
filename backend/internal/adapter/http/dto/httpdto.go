@@ -16,8 +16,9 @@ type SearchImageRequest struct {
 }
 
 type SearchResponse struct {
-	Results []MediaResponse `json:"results"`
-	Total   int             `json:"total"`
+	Results  []MediaResponse `json:"results"`
+	Total    int             `json:"total"`
+	UsedQwen bool            `json:"used_qwen"`
 }
 
 type MediaResponse struct {
@@ -92,4 +93,5 @@ type MediaItem struct {
 	TakenAt   string `json:"taken_at,omitempty"` // RFC3339, empty if unknown
 	CreatedAt string `json:"created_at"`         // RFC3339
 	LocalPath string `json:"local_path,omitempty"`
+	Status    string `json:"status"`             // "pending", "fast_encoded", "slow_encoded"
 }

@@ -41,6 +41,14 @@ func (c *Client) Enqueue(ctx context.Context, key string, payload []byte) error 
 	return c.rdb.RPush(ctx, key, payload).Err()
 }
 
+func (c *Client) Publish(ctx context.Context, channel string, message interface{}) error {
+	return c.rdb.Publish(ctx, channel, message).Err()
+}
+
+func (c *Client) Subscribe(ctx context.Context, channels ...string) *redis.PubSub {
+	return c.rdb.Subscribe(ctx, channels...)
+}
+
 // func (c *Client) DequeueBlock(ctx context.Context, key string, timeoutSeconds int) (string, []byte, error) {
 // 	// BRPOP returns list [key, value]
 // 	res, err := c.rdb.BRPop(ctx, 0*time.Second, key).Result()
@@ -51,10 +59,15 @@ func (c *Client) Enqueue(ctx context.Context, key string, payload []byte) error 
 // 	return res[0], []byte(res[1]), nil
 // }
 
-func (c *Client) DequeueBlock(ctx context.Context, key string, timeoutSeconds int) (string, []byte, error) {
+func (c *Client) DequeueBlock(ctx context.Context, timeoutSeconds int, keys ...string) (string, []byte, error) {
+	if len(keys) == 0 {
+		return "", nil, fmt.Errorf("no keys provided to DequeueBlock")
+	}
+	
 	for {
-		// BRPop with a real timeout
-		res, err := c.rdb.BRPop(ctx, time.Duration(timeoutSeconds)*time.Second, key).Result()
+		// BRPop with a real timeout, accepts multiple keys. 
+		// Redis checks the keys in the order given, natively prioritizing the first key!
+		res, err := c.rdb.BRPop(ctx, time.Duration(timeoutSeconds)*time.Second, keys...).Result()
 		if err != nil {
 			if err == redis.Nil {
 				// no job yet, just loop and retry
@@ -68,6 +81,7 @@ func (c *Client) DequeueBlock(ctx context.Context, key string, timeoutSeconds in
 			continue
 		}
 
+		// res[0] is the queue key that had the element, res[1] is the value
 		return res[0], []byte(res[1]), nil
 	}
 }

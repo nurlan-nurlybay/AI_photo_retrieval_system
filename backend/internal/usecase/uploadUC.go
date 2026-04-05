@@ -50,11 +50,10 @@ type (
 )
 
 type mediaService struct {
-	vectorIndex VectorIndex
-
-	repo  domain.MediaRepository
-	store ObjectStorage
-	queue Queue // wraps Redis
+	vectorClient VectorClient
+	repo         domain.MediaRepository
+	store        ObjectStorage
+	queue        Queue // wraps Redis
 	img   ImageProcessor
 	meta  MetadataExtractor
 	clock func() time.Time
@@ -62,8 +61,7 @@ type mediaService struct {
 }
 
 func NewMediaService(
-	milvus VectorIndex,
-
+	vc VectorClient,
 	repo domain.MediaRepository,
 	store ObjectStorage,
 	queue Queue,
@@ -72,9 +70,8 @@ func NewMediaService(
 	log *logger.Logger,
 ) MediaService {
 	return &mediaService{
-		vectorIndex: milvus,
-
-		repo:  repo,
+		vectorClient: vc,
+		repo:         repo,
 		store: store,
 		queue: queue,
 		img:   img,
@@ -178,17 +175,30 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 			continue
 		}
 
-		//  enqueue embedding job
-		job := ucdto.EmbedJob{
+		// enqueue fast job
+		fastJob := ucdto.EmbedJob{
 			UserID:   m.UserID,
 			MediaID:  mediaID,
 			Modality: "image",
 		}
-		b, _ := json.Marshal(job)
-		if err := s.queue.Enqueue(ctx, "jobs:embed", b); err != nil {
-			s.log.ErrorContext(ctx, "failed to enqueue job", "media_id", m.ID, "error", err)
+		bf, _ := json.Marshal(fastJob)
+		if err := s.queue.Enqueue(ctx, "jobs:fast_queue", bf); err != nil {
+			s.log.ErrorContext(ctx, "failed to enqueue fast job", "media_id", m.ID, "error", err)
 		} else {
-			s.log.DebugContext(ctx, "job enqueued", "media_id", m.ID, "queue", "jobs:embed")
+			s.log.DebugContext(ctx, "fast job enqueued", "media_id", m.ID)
+		}
+
+		// enqueue slow job
+		slowJob := ucdto.EmbedJob{
+			UserID:   m.UserID,
+			MediaID:  mediaID,
+			Modality: "qwen",
+		}
+		bs, _ := json.Marshal(slowJob)
+		if err := s.queue.Enqueue(ctx, "jobs:slow_queue", bs); err != nil {
+			s.log.ErrorContext(ctx, "failed to enqueue slow job", "media_id", m.ID, "error", err)
+		} else {
+			s.log.DebugContext(ctx, "slow job enqueued", "media_id", m.ID)
 		}
 
 		out = append(out, ucdto.UploadResult{Status: ucdto.StatusSaved, Media: m})
@@ -205,8 +215,8 @@ func (s *mediaService) Delete(ctx context.Context, userID, mediaID int64) error 
 		return err
 	}
 
-	// TODO: handle delete from milvus, pg, seaweedfs
-	_ = s.vectorIndex.Delete(ctx, mediaID)
+	namespace := "nurlan_gallery_batch"
+	_ = s.vectorClient.DeleteImage(ctx, namespace, mediaID)
 
 	_ = s.store.Delete(ctx, media.URL)
 	_ = s.store.Delete(ctx, media.ThumbURL)
