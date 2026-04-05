@@ -1,7 +1,8 @@
 import json
 import requests
 
-VECTOR_URL = "http://localhost:8006/v1"
+# Forcing IPv4 to bypass Docker's localhost/IPv6 proxy blackhole
+VECTOR_URL = "http://127.0.0.1:8006/v1"
 JSON_FILE = "../test_running_containers/test_ml_service/ml_service_harvest.json"
 NAMESPACE = "nurlan_gallery"
 
@@ -37,8 +38,8 @@ def run_payload():
     search_res = requests.post(f"{VECTOR_URL}/search/hybrid", json={
         "namespace": NAMESPACE,
         "query_text": query["text"],
-        "image_vector": query["vector"], # Send query embedding to image collection
-        "text_vector": query["vector"],  # Send query embedding to text collection
+        "image_vector": query["vector"],
+        "text_vector": query["vector"],
         "top_k": 3
     })
     
