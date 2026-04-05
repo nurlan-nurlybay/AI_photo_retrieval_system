@@ -83,7 +83,7 @@ func TestEmbedImage_WithLocalFile(t *testing.T) {
 
 	client, err := clip.NewClient(
 		context.Background(),
-		config.Clip{Host: host, Port: port},
+		config.Clip{Host: host, Port: uint16(port)},
 		&http.Client{},
 	)
 	if err != nil {

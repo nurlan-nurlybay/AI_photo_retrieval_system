@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'vector_service/**'
+      - '.github/workflows/vector-service-deploy.yml'
   workflow_dispatch:
 
 jobs:
