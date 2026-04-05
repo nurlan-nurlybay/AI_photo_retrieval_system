@@ -67,8 +67,8 @@ type UserImagesListResponse struct {
 }
 
 type UserImageGetRequest struct {
-	UserID  int64 `json:"user_id" binding:"required"`
-	ImageID int64 `json:"image_id" binding:"required"`
+	UserID  int64 `form:"user_id" binding:"required"`
+	ImageID int64 `form:"image_id" binding:"required"`
 }
 
 type UserImageDeleteRequest struct {

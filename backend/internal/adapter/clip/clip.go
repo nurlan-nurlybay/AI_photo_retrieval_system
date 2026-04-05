@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -18,6 +17,10 @@ import (
 type Client struct {
 	baseURL string
 	http    *http.Client
+}
+
+func NewClientFromURL(baseURL string, httpClient *http.Client) *Client {
+	return &Client{baseURL: baseURL, http: httpClient}
 }
 
 func NewClient(ctx context.Context, cfg config.Clip, httpClent *http.Client) (usecase.Embedder, error) {
@@ -37,16 +40,8 @@ func NewClient(ctx context.Context, cfg config.Clip, httpClent *http.Client) (us
 func (c *Client) EmbedText(ctx context.Context, text string) ([]float32, error) {
 	url := c.baseURL + "/v1/encode/text/"
 
-	// TODO: why the fuck list of texts ?
-	reqBody := clipdto.EncodeTextRequest{
-		Req: clipdto.TextRequest{
-			Texts: []string{text},
-		},
-		Options: clipdto.EncodeOptions{
-			Model:     "openai/clip-vit-base-patch32",
-			Normalize: true,
-			Quantize:  true,
-		},
+	reqBody := clipdto.TextRequest{
+		Texts: []string{text},
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -67,7 +62,8 @@ func (c *Client) EmbedText(ctx context.Context, text string) ([]float32, error) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("clip service returned %s", resp.Status)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("clip service returned %s: %s", resp.Status, string(bodyBytes))
 	}
 
 	var respBody clipdto.VectorResponse
@@ -75,21 +71,19 @@ func (c *Client) EmbedText(ctx context.Context, text string) ([]float32, error) 
 		return nil, fmt.Errorf("decode failed: %w", err)
 	}
 
-	if len(respBody.Vectors) == 0 || len(respBody.Vectors[0]) != 512 {
-		return nil, errors.New("invalid vector length")
+	if len(respBody.Vectors) == 0 || len(respBody.Vectors[0]) == 0 {
+		return nil, fmt.Errorf("empty vector response")
 	}
 
 	return respBody.Vectors[0], nil
 }
 
-// TODO: fix
 func (c *Client) EmbedImage(ctx context.Context, data []byte) ([]float32, error) {
-	url := c.baseURL + "/v1/encode/image/?model=openai/clip-vit-base-patch32&normalize=true"
+	url := c.baseURL + "/v1/encode/image/fast/"
 
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
 
-	// Create form file part
 	fw, err := w.CreateFormFile("files", "image.jpg")
 	if err != nil {
 		return nil, fmt.Errorf("create form file failed: %w", err)
@@ -121,8 +115,8 @@ func (c *Client) EmbedImage(ctx context.Context, data []byte) ([]float32, error)
 		return nil, fmt.Errorf("decode failed: %w", err)
 	}
 
-	if len(respBody.Vectors) == 0 || len(respBody.Vectors[0]) != 512 {
-		return nil, errors.New("invalid vector length")
+	if len(respBody.Vectors) == 0 || len(respBody.Vectors[0]) == 0 {
+		return nil, fmt.Errorf("empty vector response")
 	}
 
 	return respBody.Vectors[0], nil
