@@ -45,6 +45,11 @@ func SetupRoutes(rdb *redisadapter.Client, searchSvc usecase.SearchService, uplo
 	r.DELETE("/api/user/images/delete", imageUploadHandler.DeleteUserImage)
 	r.GET("/api/user/images/get", imageUploadHandler.GetUserImage)
 
+	// Deletion cascade endpoints (3-tier)
+	r.DELETE("/api/user/images/delete-batch", imageUploadHandler.DeleteBatchHandler)
+	r.DELETE("/api/user/images/clear", imageUploadHandler.ClearGalleryHandler)
+	r.DELETE("/api/user/account", imageUploadHandler.DeleteAccountHandler)
+
 	// Streams
 	r.GET("/api/status-stream", StatusStreamHandler(rdb))
 

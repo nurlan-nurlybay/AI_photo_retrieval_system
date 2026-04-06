@@ -1,7 +1,7 @@
 import asyncio
 from functools import partial
 from fastapi import FastAPI, HTTPException
-from app.models import AddImageBatchRequest, AddTextBatchRequest, SearchRequest
+from app.models import AddImageBatchRequest, AddTextBatchRequest, SearchRequest, DeleteItemsRequest
 from app import core
 from app.reranker import ranker
 import json
@@ -56,6 +56,12 @@ async def search_hybrid(req: SearchRequest):
 async def get_status(namespace: str):
     is_synced = core.check_sync_status(namespace)
     return {"namespace": namespace, "is_synced": is_synced}
+
+@app.post("/v1/delete/items")
+async def delete_items(req: DeleteItemsRequest):
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, partial(core.delete_items, req.namespace, req.image_ids))
+    return {"ok": True, "status": f"deleted {len(req.image_ids)} items from {req.namespace}"}
 
 @app.post("/v1/admin/clear/{namespace}")
 async def clear_namespace(namespace: str):

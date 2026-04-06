@@ -49,10 +49,16 @@ type EmbeddingsRepo interface {
 	MarkInIndex(ctx context.Context, userID, mediaID int64) error
 	MarkFailed(ctx context.Context, userID, mediaID int64, msg string) error
 
-	// Retry helpers
-	ListUnindexed(ctx context.Context, userID int64, limit int) ([]int64, error) // rows where status IN ('pending','failed')
+	// Retry helpers — return (media_id, user_id) pairs for correct namespace routing
+	ListUnindexed(ctx context.Context, userID int64, limit int) ([]MediaRef, error)
 	GetEmbeddingBytes(ctx context.Context, userID, mediaID int64) ([]byte, error)
-	ListUnembedded(ctx context.Context, limit int) ([]int64, error) // media IDs with no embeddings row
+	ListUnembedded(ctx context.Context, limit int) ([]MediaRef, error)
+}
+
+// MediaRef carries a media_id + user_id pair for multi-user retry routing.
+type MediaRef struct {
+	MediaID int64
+	UserID  int64
 }
 
 type Enqueuer interface {
@@ -167,6 +173,7 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob, source
 
 	var vec32 []float32
 	var newStatus string
+	var modelName string
 	var ingestItem vector.IngestItem
 
 	if sourceQueue == w.FastQueueKey {
@@ -177,6 +184,7 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob, source
 			return err
 		}
 		vec32 = vec
+		modelName = "siglip"
 
 		ingestItem = vector.IngestItem{
 			ImageID: job.MediaID,
@@ -197,10 +205,12 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob, source
 			return err
 		}
 		vec32 = slowRes.TextVector
+		modelName = "qwen"
 
 		ingestItem = vector.IngestItem{
 			ImageID: job.MediaID,
 			Vector:  vec32,
+			Tags:    slowRes.Tags,
 		}
 
 		// Even if "qwen" logic is missing above, we simulate sending it as TextBatch to vector service.
@@ -229,13 +239,16 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob, source
 
 	// Keep legacy embeddings tracking functional for RetryWorker
 	bytesVec := utils.Float32ToBytes(vec32)
+	now := time.Now().UTC()
 	emb := &domain.Embedding{
 		MediaID:   job.MediaID,
 		UserID:    job.UserID,
-		Model:     job.Modality,
+		Model:     modelName,
 		VecBytes:  bytesVec,
 		Status:    "in_index",
 		LastError: "",
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	_ = w.EmbeddingsRepo.UpsertEmbedding(ctx, emb)
 

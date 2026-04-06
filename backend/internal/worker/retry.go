@@ -47,31 +47,30 @@ func (w *RetryWorker) Run(ctx context.Context) error {
 }
 
 func (w *RetryWorker) step(ctx context.Context) {
-	// 1. Replay existing pending/failed embeddings into FAISS
-	ids, err := w.EmbeddingsRepo.ListUnindexed(ctx, 0, w.Batch)
-	if err == nil && len(ids) > 0 {
-		for _, mediaID := range ids {
-			vb, err := w.EmbeddingsRepo.GetEmbeddingBytes(ctx, 0, mediaID)
+	// 1. Replay existing pending/failed embeddings into vector service
+	refs, err := w.EmbeddingsRepo.ListUnindexed(ctx, 0, w.Batch)
+	if err == nil && len(refs) > 0 {
+		for _, ref := range refs {
+			vb, err := w.EmbeddingsRepo.GetEmbeddingBytes(ctx, ref.UserID, ref.MediaID)
 			if err != nil || len(vb) == 0 {
-				_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, utils.TruncateErr(err))
+				_ = w.EmbeddingsRepo.MarkFailed(ctx, ref.UserID, ref.MediaID, utils.TruncateErr(err))
 				continue
 			}
 			vec := utils.BytesToFloat32(vb)
 
-			// Assuming retry hits the Image Ingest endpoint for now
 			item := vector.IngestItem{
-				ImageID: mediaID,
+				ImageID: ref.MediaID,
 				Vector:  vec,
 			}
-			if err := w.VectorClient.IngestImageBatch(ctx, 404, []vector.IngestItem{item}); err != nil {
+			if err := w.VectorClient.IngestImageBatch(ctx, ref.UserID, []vector.IngestItem{item}); err != nil {
 				if isAlreadyExists(err, w.AlreadyExistsSubstrings) {
-					_ = w.EmbeddingsRepo.MarkInIndex(ctx, 404, mediaID)
+					_ = w.EmbeddingsRepo.MarkInIndex(ctx, ref.UserID, ref.MediaID)
 					continue
 				}
-				_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, utils.TruncateErr(err))
+				_ = w.EmbeddingsRepo.MarkFailed(ctx, ref.UserID, ref.MediaID, utils.TruncateErr(err))
 				continue
 			}
-			_ = w.EmbeddingsRepo.MarkInIndex(ctx, 404, mediaID)
+			_ = w.EmbeddingsRepo.MarkInIndex(ctx, ref.UserID, ref.MediaID)
 		}
 	}
 
@@ -87,10 +86,10 @@ func (w *RetryWorker) step(ctx context.Context) {
 	if queueKey == "" {
 		queueKey = "jobs:embed"
 	}
-	for _, mediaID := range unembedded {
+	for _, ref := range unembedded {
 		job := ucdto.EmbedJob{
-			UserID:   404,
-			MediaID:  mediaID,
+			UserID:   ref.UserID,
+			MediaID:  ref.MediaID,
 			Modality: "image",
 		}
 		payload, err := json.Marshal(job)

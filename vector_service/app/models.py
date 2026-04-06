@@ -24,3 +24,6 @@ class SearchRequest(NamespaceRequest):
     image_vector: Optional[List[float]] = None
     text_vector: Optional[List[float]] = None
     top_k: int = 10
+
+class DeleteItemsRequest(NamespaceRequest):
+    image_ids: List[int]

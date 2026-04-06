@@ -26,7 +26,9 @@ type (
 
 	VectorClient interface {
 		SearchHybrid(ctx context.Context, namespace string, queryText string, imageVec []float32, textVec []float32, topK int) ([]SearchResult, bool, error)
-		DeleteImage(ctx context.Context, namespace string, imageID int64) error
+		DeleteItems(ctx context.Context, userID int64, imageIDs []int64) error
+		ClearNamespace(ctx context.Context, userID int64) error
+		NukeNamespace(ctx context.Context, userID int64) error
 	}
 
 	SearchResult struct {

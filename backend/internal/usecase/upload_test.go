@@ -97,6 +97,14 @@ func (m *mockRepo) List(ctx context.Context, f domain.MediaFilter, p domain.Page
 	return nil, 0, nil
 }
 
+func (m *mockRepo) ListAllByUser(_ context.Context, _ int64) ([]*domain.Media, error) {
+	return nil, nil
+}
+
+func (m *mockRepo) DeleteAllByUser(_ context.Context, _ int64) error {
+	return nil
+}
+
 type mockQueue struct {
 	enqueued [][]byte
 }
@@ -129,7 +137,13 @@ type mockVectorClient struct{}
 func (m *mockVectorClient) SearchHybrid(_ context.Context, _ string, _ string, _ []float32, _ []float32, _ int) ([]SearchResult, bool, error) {
 	return nil, false, nil
 }
-func (m *mockVectorClient) DeleteImage(_ context.Context, _ string, _ int64) error {
+func (m *mockVectorClient) DeleteItems(_ context.Context, _ int64, _ []int64) error {
+	return nil
+}
+func (m *mockVectorClient) ClearNamespace(_ context.Context, _ int64) error {
+	return nil
+}
+func (m *mockVectorClient) NukeNamespace(_ context.Context, _ int64) error {
 	return nil
 }
 

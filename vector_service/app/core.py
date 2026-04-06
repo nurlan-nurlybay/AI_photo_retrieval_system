@@ -145,3 +145,25 @@ def clear_all_namespaces() -> tuple[int, list]:
         except Exception as e:
             errors.append(str(e))
     return deleted, errors
+
+def delete_items(namespace: str, image_ids: list[int]):
+    """Surgically delete specific entity IDs from both _img and _txt collections."""
+    connect()
+    if not image_ids:
+        return
+
+    expr = f"id in {image_ids}"
+    for suffix in ("_img", "_txt"):
+        col_name = f"{namespace}{suffix}"
+        with LOCK:
+            if not utility.has_collection(col_name):
+                logger.warning("delete_items_skip", collection=col_name, reason="not found")
+                continue
+        try:
+            col = get_collection(col_name, is_text=(suffix == "_txt"))
+            col.delete(expr)
+            col.flush()
+            logger.info("delete_items_ok", collection=col_name, count=len(image_ids))
+        except Exception as e:
+            logger.error("delete_items_failed", collection=col_name, error=str(e))
+            raise

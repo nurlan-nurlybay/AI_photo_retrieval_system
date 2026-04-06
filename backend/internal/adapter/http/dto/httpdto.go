@@ -32,6 +32,7 @@ type MediaResponse struct {
 
 // ===== Upload Image =====
 type UploadRequest struct {
+	UserID     int64                   `form:"user_id" binding:"required,min=1"`
 	Files      []*multipart.FileHeader `form:"files[]" binding:"required,min=1,max=100"`
 	Dedup      bool                    `form:"dedup,default=true"`
 	LocalPaths []string                `form:"local_paths[]"`
@@ -94,4 +95,23 @@ type MediaItem struct {
 	CreatedAt string `json:"created_at"`         // RFC3339
 	LocalPath string `json:"local_path,omitempty"`
 	Status    string `json:"status"`             // "pending", "fast_encoded", "slow_encoded"
+}
+
+// ===== Deletion =====
+type DeleteBatchRequest struct {
+	UserID   int64   `json:"user_id"  binding:"required"`
+	ImageIDs []int64 `json:"image_ids" binding:"required,min=1"`
+}
+
+type ClearGalleryRequest struct {
+	UserID int64 `json:"user_id" binding:"required"`
+}
+
+type DeleteAccountRequest struct {
+	UserID int64 `json:"user_id" binding:"required"`
+}
+
+type DeleteResponse struct {
+	OK      bool   `json:"ok"`
+	Message string `json:"message"`
 }

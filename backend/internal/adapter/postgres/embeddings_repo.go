@@ -47,6 +47,11 @@ func (r *EmbeddingsRepo) UpsertEmbedding(ctx context.Context, emb *domain.Embedd
 			emb.MediaID, emb.UserID, emb.Model, emb.VecBytes,
 			emb.Status, emb.LastError, emb.CreatedAt, emb.UpdatedAt,
 		).
+		Suffix(`ON CONFLICT (media_id, model) DO UPDATE SET 
+			vec_bytes = EXCLUDED.vec_bytes, 
+			status = EXCLUDED.status, 
+			last_error = EXCLUDED.last_error, 
+			updated_at = EXCLUDED.updated_at`).
 		PlaceholderFormat(squirrel.Dollar).
 		ToSql()
 	if err != nil {
@@ -165,9 +170,9 @@ func (r *EmbeddingsRepo) updateStatus(ctx context.Context, userID, mediaID int64
 
 // rows where status IN ('pending','failed')
 // userID=0 to set global search
-func (r *EmbeddingsRepo) ListUnindexed(ctx context.Context, userID int64, limit int) ([]int64, error) {
+func (r *EmbeddingsRepo) ListUnindexed(ctx context.Context, userID int64, limit int) ([]worker.MediaRef, error) {
 	qb := squirrel.
-		Select(EmbMediaIDCol).
+		Select(EmbMediaIDCol, EmbUserIDCol).
 		From(EmbTableName).
 		Where(squirrel.Eq{
 			EmbStatusCol: []string{"pending", "failed"},
@@ -197,23 +202,23 @@ func (r *EmbeddingsRepo) ListUnindexed(ctx context.Context, userID int64, limit 
 	}
 	defer rows.Close()
 
-	var ids []int64
+	var refs []worker.MediaRef
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan unindexed id: %w", err)
+		var ref worker.MediaRef
+		if err := rows.Scan(&ref.MediaID, &ref.UserID); err != nil {
+			return nil, fmt.Errorf("scan unindexed ref: %w", err)
 		}
-		ids = append(ids, id)
+		refs = append(refs, ref)
 	}
 
-	return ids, rows.Err()
+	return refs, rows.Err()
 }
 
-// ListUnembedded returns media IDs that exist in the media table but have no
+// ListUnembedded returns media that exist in the media table but have no
 // corresponding row in the embeddings table — i.e. uploads that were never embedded.
-func (r *EmbeddingsRepo) ListUnembedded(ctx context.Context, limit int) ([]int64, error) {
+func (r *EmbeddingsRepo) ListUnembedded(ctx context.Context, limit int) ([]worker.MediaRef, error) {
 	raw := fmt.Sprintf(
-		`SELECT m.id FROM %s m LEFT JOIN %s e ON m.id = e.media_id WHERE e.media_id IS NULL ORDER BY m.id LIMIT $1`,
+		`SELECT m.id, m.user_id FROM %s m LEFT JOIN %s e ON m.id = e.media_id WHERE e.media_id IS NULL ORDER BY m.id LIMIT $1`,
 		"media", EmbTableName,
 	)
 
@@ -228,15 +233,15 @@ func (r *EmbeddingsRepo) ListUnembedded(ctx context.Context, limit int) ([]int64
 	}
 	defer rows.Close()
 
-	var ids []int64
+	var refs []worker.MediaRef
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan unembedded id: %w", err)
+		var ref worker.MediaRef
+		if err := rows.Scan(&ref.MediaID, &ref.UserID); err != nil {
+			return nil, fmt.Errorf("scan unembedded ref: %w", err)
 		}
-		ids = append(ids, id)
+		refs = append(refs, ref)
 	}
-	return ids, rows.Err()
+	return refs, rows.Err()
 }
 
 func (r *EmbeddingsRepo) GetEmbeddingBytes(ctx context.Context, userID, mediaID int64) ([]byte, error) {

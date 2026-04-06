@@ -20,6 +20,9 @@ import (
 type MediaService interface {
 	UploadBatch(ctx context.Context, items []ucdto.UploadInput) ([]ucdto.UploadResult, error)
 	Delete(ctx context.Context, userID, mediaID int64) error
+	DeleteBatch(ctx context.Context, userID int64, imageIDs []int64) error
+	ClearGallery(ctx context.Context, userID int64) error
+	DeleteAccount(ctx context.Context, userID int64) error
 	GetByID(ctx context.Context, userID, mediaID int64) (*domain.Media, error)
 	List(ctx context.Context, f domain.MediaFilter, p domain.Page, s domain.Sort) ([]*domain.Media, int, error)
 }
@@ -57,10 +60,10 @@ type mediaService struct {
 	repo         domain.MediaRepository
 	store        ObjectStorage
 	queue        Queue // wraps Redis
-	img   ImageProcessor
-	meta  MetadataExtractor
-	clock func() time.Time
-	log   *logger.Logger
+	img          ImageProcessor
+	meta         MetadataExtractor
+	clock        func() time.Time
+	log          *logger.Logger
 }
 
 func NewMediaService(
@@ -75,12 +78,12 @@ func NewMediaService(
 	return &mediaService{
 		vectorClient: vc,
 		repo:         repo,
-		store: store,
-		queue: queue,
-		img:   img,
-		meta:  meta,
-		clock: time.Now,
-		log:   log,
+		store:        store,
+		queue:        queue,
+		img:          img,
+		meta:         meta,
+		clock:        time.Now,
+		log:          log,
 	}
 }
 
@@ -206,20 +209,122 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 	return out, nil
 }
 
+// Delete removes a single image. Cascade: S3 -> Postgres -> Vector Service.
 func (s *mediaService) Delete(ctx context.Context, userID, mediaID int64) error {
 	media, err := s.repo.Get(ctx, userID, mediaID)
 	if err != nil {
 		return err
 	}
+	if media == nil {
+		return fmt.Errorf("media %d not found for user %d", mediaID, userID)
+	}
 
-	namespace := fmt.Sprintf("user_%d", userID)
-	_ = s.vectorClient.DeleteImage(ctx, namespace, mediaID)
-
+	// 1. S3
 	_ = s.store.Delete(ctx, extractKey(media.URL))
 	_ = s.store.Delete(ctx, extractKey(media.ThumbURL))
 
-	_ = s.repo.Delete(ctx, userID, mediaID)
+	// 2. Postgres (embeddings cascade via FK)
+	if err := s.repo.Delete(ctx, userID, mediaID); err != nil {
+		return err
+	}
 
+	// 3. Vector Service
+	_ = s.vectorClient.DeleteItems(ctx, userID, []int64{mediaID})
+
+	return nil
+}
+
+// DeleteBatch removes specific image IDs. Cascade: S3 -> Postgres -> Vector Service.
+func (s *mediaService) DeleteBatch(ctx context.Context, userID int64, imageIDs []int64) error {
+	s.log.InfoContext(ctx, "delete batch started", "user_id", userID, "count", len(imageIDs))
+
+	// 1. Fetch S3 keys for each image and delete from S3
+	for _, id := range imageIDs {
+		media, err := s.repo.Get(ctx, userID, id)
+		if err != nil {
+			s.log.ErrorContext(ctx, "delete batch: failed to fetch media", "media_id", id, "error", err)
+			continue
+		}
+		if media == nil {
+			continue
+		}
+		_ = s.store.Delete(ctx, extractKey(media.URL))
+		_ = s.store.Delete(ctx, extractKey(media.ThumbURL))
+	}
+
+	// 2. Postgres — delete one by one to respect ownership
+	for _, id := range imageIDs {
+		if err := s.repo.Delete(ctx, userID, id); err != nil {
+			s.log.ErrorContext(ctx, "delete batch: postgres delete failed", "media_id", id, "error", err)
+		}
+	}
+
+	// 3. Vector Service — single batch call
+	if err := s.vectorClient.DeleteItems(ctx, userID, imageIDs); err != nil {
+		s.log.ErrorContext(ctx, "delete batch: vector delete failed", "error", err)
+	}
+
+	s.log.InfoContext(ctx, "delete batch completed", "user_id", userID, "count", len(imageIDs))
+	return nil
+}
+
+// ClearGallery removes all user images but keeps the account. Cascade: S3 -> Postgres -> Vector Service.
+func (s *mediaService) ClearGallery(ctx context.Context, userID int64) error {
+	s.log.InfoContext(ctx, "clear gallery started", "user_id", userID)
+
+	// 1. Fetch all media to get S3 keys
+	allMedia, err := s.repo.ListAllByUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("clear gallery: list media: %w", err)
+	}
+
+	// 2. Delete from S3
+	for _, m := range allMedia {
+		_ = s.store.Delete(ctx, extractKey(m.URL))
+		_ = s.store.Delete(ctx, extractKey(m.ThumbURL))
+	}
+
+	// 3. Postgres — bulk delete (embeddings cascade via FK)
+	if err := s.repo.DeleteAllByUser(ctx, userID); err != nil {
+		return fmt.Errorf("clear gallery: postgres delete: %w", err)
+	}
+
+	// 4. Vector Service — clear namespace (drops and recreates collections)
+	if err := s.vectorClient.ClearNamespace(ctx, userID); err != nil {
+		s.log.ErrorContext(ctx, "clear gallery: vector clear failed", "error", err)
+	}
+
+	s.log.InfoContext(ctx, "clear gallery completed", "user_id", userID, "deleted_count", len(allMedia))
+	return nil
+}
+
+// DeleteAccount removes all data AND nukes the vector namespace. Cascade: S3 -> Postgres -> Vector Service.
+func (s *mediaService) DeleteAccount(ctx context.Context, userID int64) error {
+	s.log.InfoContext(ctx, "delete account started", "user_id", userID)
+
+	// 1. Fetch all media to get S3 keys
+	allMedia, err := s.repo.ListAllByUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("delete account: list media: %w", err)
+	}
+
+	// 2. Delete from S3
+	for _, m := range allMedia {
+		_ = s.store.Delete(ctx, extractKey(m.URL))
+		_ = s.store.Delete(ctx, extractKey(m.ThumbURL))
+	}
+
+	// 3. Postgres — bulk delete (embeddings cascade via FK)
+	if err := s.repo.DeleteAllByUser(ctx, userID); err != nil {
+		return fmt.Errorf("delete account: postgres delete: %w", err)
+	}
+
+	// 4. Vector Service — nuke namespace (permanent drop)
+	if err := s.vectorClient.NukeNamespace(ctx, userID); err != nil {
+		s.log.ErrorContext(ctx, "delete account: vector nuke failed", "error", err)
+	}
+
+	s.log.InfoContext(ctx, "delete account completed", "user_id", userID, "deleted_count", len(allMedia))
 	return nil
 }
 

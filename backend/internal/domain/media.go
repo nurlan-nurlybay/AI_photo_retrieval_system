@@ -63,4 +63,8 @@ type MediaRepository interface {
 
 	// dedup helper
 	GetByChecksum(ctx context.Context, uID int64, checksum string) (*Media, error)
+
+	// bulk deletion helpers
+	ListAllByUser(ctx context.Context, userID int64) ([]*Media, error)
+	DeleteAllByUser(ctx context.Context, userID int64) error
 }

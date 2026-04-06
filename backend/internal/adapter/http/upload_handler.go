@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -48,15 +49,13 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 	log := h.logger.With("handler", "ImageUpload")
 	log.Info("received req")
 
-	userID := c.GetInt64("userID")
-	// TODO use real userID
-	userID = 404
-
 	var req httpdto.UploadRequest
 	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid multipart form: " + err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request: " + err.Error()})
 		return
 	}
+
+	userID := req.UserID
 
 	if len(req.Files) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"err": "no files[] provided"})
@@ -288,4 +287,67 @@ func (h *ImageHandler) GetUserImage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func (h *ImageHandler) DeleteBatchHandler(c *gin.Context) {
+	log := h.logger.With("handler", "DeleteBatch")
+	log.Info("received req")
+
+	var req httpdto.DeleteBatchRequest
+	if !BindAndValidate(c, h.validator, &req) {
+		return
+	}
+
+	err := h.uploadUC.DeleteBatch(c.Request.Context(), req.UserID, req.ImageIDs)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, httpdto.DeleteResponse{
+		OK:      true,
+		Message: fmt.Sprintf("deleted %d images for user %d", len(req.ImageIDs), req.UserID),
+	})
+}
+
+func (h *ImageHandler) ClearGalleryHandler(c *gin.Context) {
+	log := h.logger.With("handler", "ClearGallery")
+	log.Info("received req")
+
+	var req httpdto.ClearGalleryRequest
+	if !BindAndValidate(c, h.validator, &req) {
+		return
+	}
+
+	err := h.uploadUC.ClearGallery(c.Request.Context(), req.UserID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, httpdto.DeleteResponse{
+		OK:      true,
+		Message: fmt.Sprintf("gallery cleared for user %d", req.UserID),
+	})
+}
+
+func (h *ImageHandler) DeleteAccountHandler(c *gin.Context) {
+	log := h.logger.With("handler", "DeleteAccount")
+	log.Info("received req")
+
+	var req httpdto.DeleteAccountRequest
+	if !BindAndValidate(c, h.validator, &req) {
+		return
+	}
+
+	err := h.uploadUC.DeleteAccount(c.Request.Context(), req.UserID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, httpdto.DeleteResponse{
+		OK:      true,
+		Message: fmt.Sprintf("account and all data nuked for user %d", req.UserID),
+	})
 }

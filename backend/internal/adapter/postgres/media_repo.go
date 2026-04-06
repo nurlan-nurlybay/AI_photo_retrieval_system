@@ -356,3 +356,75 @@ func (r *MediaRepo) UpdateStatus(ctx context.Context, userID, id int64, status s
 
 	return nil
 }
+
+func (r *MediaRepo) ListAllByUser(ctx context.Context, userID int64) ([]*domain.Media, error) {
+	query, args, err := squirrel.
+		Select(
+			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol,
+			SizeBytesCol, ChecksumCol, CreatedAtCol, TakenAtCol,
+			WidthCol, HeightCol, MakeCol, ModelCol, SoftwareCol,
+			OrientCol, LocalPathCol, StatusCol,
+		).
+		From(TableName).
+		Where(squirrel.Eq{UserIDCol: userID}).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("build media list all by user: %w", err)
+	}
+
+	q := db.Query{
+		Name:     "MediaRepo.ListAllByUser",
+		QueryRaw: query,
+	}
+
+	rows, err := r.db.DB().QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("exec media list all by user: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*domain.Media
+	for rows.Next() {
+		var m domain.Media
+		var meta domain.Metadata
+
+		if err := rows.Scan(
+			&m.ID, &m.UserID, &m.URL, &m.ThumbURL, &m.MimeType,
+			&m.SizeBytes, &m.Checksum, &m.CreatedAt,
+			&meta.DateTimeOriginal, &meta.Width, &meta.Height,
+			&meta.CameraMake, &meta.CameraModel, &meta.Software,
+			&meta.Orientation, &m.LocalPath, &m.Status,
+		); err != nil {
+			return nil, fmt.Errorf("scan media: %w", err)
+		}
+
+		m.Metadata = meta
+		results = append(results, &m)
+	}
+
+	return results, nil
+}
+
+func (r *MediaRepo) DeleteAllByUser(ctx context.Context, userID int64) error {
+	query, args, err := squirrel.
+		Delete(TableName).
+		Where(squirrel.Eq{UserIDCol: userID}).
+		PlaceholderFormat(squirrel.Dollar).
+		ToSql()
+	if err != nil {
+		return fmt.Errorf("build media delete all by user: %w", err)
+	}
+
+	q := db.Query{
+		Name:     "MediaRepo.DeleteAllByUser",
+		QueryRaw: query,
+	}
+
+	_, err = r.db.DB().ExecContext(ctx, q, args...)
+	if err != nil {
+		return fmt.Errorf("exec media delete all by user: %w", err)
+	}
+
+	return nil
+}

@@ -88,24 +88,34 @@ func (c *Client) IngestTextBatch(ctx context.Context, userID int64, items []Inge
 	return c.postJSON(ctx, "/v1/ingest/text", body)
 }
 
-func (c *Client) DeleteImage(ctx context.Context, namespace string, imageID int64) error {
-	endpoint := fmt.Sprintf("%s/v1/delete?namespace=%s&image_id=%d", c.cfg.URL, namespace, imageID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create delete request: %w", err)
-	}
+// --- Deletion types (match Python vector service endpoints) ---
 
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("vector service http error on delete: %w", err)
-	}
-	defer resp.Body.Close()
+type deleteItemsRequest struct {
+	Namespace string  `json:"namespace"`
+	ImageIDs  []int64 `json:"image_ids"`
+}
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("vector service delete returned status %d: %s", resp.StatusCode, string(bodyBytes))
+func (c *Client) DeleteItems(ctx context.Context, userID int64, imageIDs []int64) error {
+	if len(imageIDs) == 0 {
+		return nil
 	}
-	return nil
+	body := deleteItemsRequest{
+		Namespace: UserNamespace(userID),
+		ImageIDs:  imageIDs,
+	}
+	return c.postJSON(ctx, "/v1/delete/items", body)
+}
+
+func (c *Client) ClearNamespace(ctx context.Context, userID int64) error {
+	path := fmt.Sprintf("/v1/admin/clear/%s", UserNamespace(userID))
+	return c.postJSON(ctx, path, nil)
+}
+
+func (c *Client) NukeNamespace(ctx context.Context, userID int64) error {
+	// For per-user account deletion, we clear only that user's namespace.
+	// The global /v1/admin/nuke endpoint is reserved for admin-only use.
+	path := fmt.Sprintf("/v1/admin/clear/%s", UserNamespace(userID))
+	return c.postJSON(ctx, path, nil)
 }
 
 // --- Search types (match Python SearchRequest / response) ---
