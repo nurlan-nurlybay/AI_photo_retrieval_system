@@ -18,6 +18,7 @@ func NewClient(ctx context.Context, cfg *config.Config) (*Client, error) {
 		Addr:     cfg.Redis.Addr,
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
+		PoolSize: 50,
 	})
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		return nil, err

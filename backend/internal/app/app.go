@@ -170,14 +170,14 @@ func (a *App) Run(ctx context.Context) error {
 	})
 
 	// EmbedWorker Pool
-	fastWorkers := 50
-	if val := os.Getenv("FAST_WORKER_COUNT"); val != "" {
+	fastWorkers := 10
+	if val := os.Getenv("EMBED_FAST_WORKERS"); val != "" {
 		if c, err := strconv.Atoi(val); err == nil {
 			fastWorkers = c
 		}
 	}
-	slowWorkers := 15
-	if val := os.Getenv("SLOW_WORKER_COUNT"); val != "" {
+	slowWorkers := 5
+	if val := os.Getenv("EMBED_SLOW_WORKERS"); val != "" {
 		if c, err := strconv.Atoi(val); err == nil {
 			slowWorkers = c
 		}
