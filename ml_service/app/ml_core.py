@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import threading
 import torch
 import io
 from PIL import Image
@@ -27,28 +28,37 @@ siglip_model: Any = None
 qwen_processor: Any = None
 qwen_model: Any = None
 
+# Thread locks to prevent concurrent model loading (double-checked locking pattern)
+_siglip_lock = threading.Lock()
+_qwen_lock = threading.Lock()
+
 def warmup():
     """Bootstraps SigLIP only. Called by FastAPI lifespan."""
     global siglip_processor, siglip_model
     if siglip_model is None:
-        print(f"--- Warming up SigLIP 2 ({SIGLIP_ID}) ---")
-        siglip_processor = AutoProcessor.from_pretrained(SIGLIP_ID)
-        siglip_model = AutoModel.from_pretrained(SIGLIP_ID, attn_implementation="sdpa").to(device)
+        with _siglip_lock:
+            if siglip_model is None:
+                print(f"--- Warming up SigLIP 2 ({SIGLIP_ID}) ---")
+                siglip_processor = AutoProcessor.from_pretrained(SIGLIP_ID)
+                siglip_model = AutoModel.from_pretrained(SIGLIP_ID, attn_implementation="sdpa").to(device)
 
 def _load_qwen():
-    """Lazy-loads Qwen3 only when the slow path is hit."""
+    """Lazy-loads Qwen3 only when the slow path is hit. Thread-safe."""
     global qwen_processor, qwen_model
     if qwen_model is None:
-        print(f"--- Lazy-loading Qwen 3 ({QWEN_ID}) ---")
-        quant_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
-        qwen_processor = AutoProcessor.from_pretrained(QWEN_ID)
-        qwen_model = Qwen3VLForConditionalGeneration.from_pretrained(
-            QWEN_ID, 
-            torch_dtype=torch.float16,
-            device_map={"": device}, 
-            quantization_config=quant_config, 
-            attn_implementation="sdpa"
-        )
+        with _qwen_lock:
+            # Double-check after acquiring lock — another thread may have loaded it while we waited
+            if qwen_model is None:
+                print(f"--- Lazy-loading Qwen 3 ({QWEN_ID}) ---")
+                quant_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
+                qwen_processor = AutoProcessor.from_pretrained(QWEN_ID)
+                qwen_model = Qwen3VLForConditionalGeneration.from_pretrained(
+                    QWEN_ID, 
+                    torch_dtype=torch.float16,
+                    device_map={"": device}, 
+                    quantization_config=quant_config, 
+                    attn_implementation="sdpa"
+                )
 
 def _l2_norm(tensor_obj):
     """Safely extracts the tensor from HF wrappers and normalizes it."""
