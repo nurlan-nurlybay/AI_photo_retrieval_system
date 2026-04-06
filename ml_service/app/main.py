@@ -53,6 +53,15 @@ def url_fast_path(req: ImageURLRequest):
         blobs.append(response.content)
     return {"vectors": encode_image_fast(blobs)}
 
+@app.post("/v1/encode/image/url/slow/", response_model=SlowEncodeResponse)
+def url_slow_path(req: ImageURLRequest):
+    blobs = []
+    for url in req.urls:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        blobs.append(response.content)
+    return {"results": encode_image_slow(blobs)}
+
 @app.get("/healthz")
 def healthz(): 
     return {"ok": True, "status": "healthy"}

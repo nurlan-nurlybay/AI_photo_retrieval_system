@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
+	clipdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/clip/dto"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
 )
 
@@ -20,6 +21,7 @@ type (
 		EmbedText(ctx context.Context, text string) ([]float32, error)
 		EmbedImage(ctx context.Context, data []byte) ([]float32, error)
 		EmbedImageURL(ctx context.Context, url string) ([]float32, error)
+		EmbedImageURLSlow(ctx context.Context, url string) (*clipdto.SlowEncodeResult, error)
 	}
 
 	VectorClient interface {

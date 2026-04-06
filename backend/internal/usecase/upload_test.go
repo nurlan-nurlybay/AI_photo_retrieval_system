@@ -37,7 +37,7 @@ func (m *mockStorage) Put(ctx context.Context, key string, r *bytes.Reader) (str
 	if m.putFn != nil {
 		return m.putFn(ctx, key, bytes.NewReader(buf.Bytes()))
 	}
-	return fmt.Sprintf("http://seaweed:8888/%s", key), nil
+	return fmt.Sprintf("http://test-bucket.s3.amazonaws.com/%s", key), nil
 }
 
 func (m *mockStorage) Delete(ctx context.Context, key string) error {
@@ -49,7 +49,7 @@ func (m *mockStorage) Delete(ctx context.Context, key string) error {
 }
 
 func (m *mockStorage) GeneratePresignedURL(ctx context.Context, key string, expiration time.Duration) (string, error) {
-	return fmt.Sprintf("http://seaweed:8888/%s?expires=%v", key, expiration), nil
+	return fmt.Sprintf("http://test-bucket.s3.amazonaws.com/%s?expires=%v", key, expiration), nil
 }
 
 type mockRepo struct {
@@ -185,8 +185,8 @@ func TestUploadBatch_SingleImage_Success(t *testing.T) {
 	assert.True(t, strings.HasSuffix(store.putCalls[0].key, "/original.jpg"), "first put should be original")
 	assert.True(t, strings.HasSuffix(store.putCalls[1].key, "/thumb.jpg"), "second put should be thumb")
 
-	// Verify embed job was enqueued (fast only)
-	assert.Len(t, q.enqueued, 1)
+	// Verify embed jobs were enqueued (fast + slow)
+	assert.Len(t, q.enqueued, 2)
 }
 
 func TestUploadBatch_MediaID_SetAfterCreate(t *testing.T) {
@@ -213,7 +213,7 @@ func TestUploadBatch_Dedup(t *testing.T) {
 	existing := &domain.Media{
 		ID:       99,
 		UserID:   404,
-		URL:      "http://seaweed:8888/media/404/existing/original.jpg",
+		URL:      "http://test-bucket.s3.amazonaws.com/media/404/existing/original.jpg",
 		Checksum: "existing-checksum",
 	}
 	repo := &mockRepo{
@@ -240,7 +240,7 @@ func TestUploadBatch_StorageFailure_RollbackNotAttempted(t *testing.T) {
 			if strings.Contains(key, "original") {
 				return "", errors.New("storage unavailable")
 			}
-			return "http://seaweed:8888/" + key, nil
+			return "http://test-bucket.s3.amazonaws.com/" + key, nil
 		},
 	}
 	svc, _, _, q := newTestService(store, nil)
@@ -283,8 +283,8 @@ func TestDelete_ExtractsKeyFromURL(t *testing.T) {
 	media := &domain.Media{
 		ID:       1,
 		UserID:   404,
-		URL:      "http://seaweed:8888/media/404/checksum/original.jpg",
-		ThumbURL: "http://seaweed:8888/media/404/checksum/thumb.jpg",
+		URL:      "http://test-bucket.s3.amazonaws.com/media/404/checksum/original.jpg",
+		ThumbURL: "http://test-bucket.s3.amazonaws.com/media/404/checksum/thumb.jpg",
 	}
 	repo := &mockRepo{
 		getFn: func(_ context.Context, _, _ int64) (*domain.Media, error) {
@@ -320,7 +320,7 @@ func TestUploadBatch_MultipleImages(t *testing.T) {
 		assert.Equal(t, ucdto.StatusSaved, r.Status)
 	}
 	assert.Len(t, store.putCalls, 6, "2 puts per image (original + thumb)")
-	assert.Len(t, q.enqueued, 3, "one embed job per image")
+	assert.Len(t, q.enqueued, 6, "two embed jobs per image (fast + slow)")
 }
 
 func TestUploadBatch_KeyFormat(t *testing.T) {

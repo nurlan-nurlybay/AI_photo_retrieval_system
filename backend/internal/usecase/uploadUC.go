@@ -187,9 +187,15 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 		}
 		b, _ := json.Marshal(job)
 		if err := s.queue.Enqueue(ctx, "jobs:fast_queue", b); err != nil {
-			s.log.ErrorContext(ctx, "failed to enqueue embed job", "media_id", m.ID, "error", err)
+			s.log.ErrorContext(ctx, "failed to enqueue fast embed job", "media_id", m.ID, "error", err)
 		} else {
-			s.log.DebugContext(ctx, "embed job enqueued", "media_id", m.ID)
+			s.log.DebugContext(ctx, "fast embed job enqueued", "media_id", m.ID)
+		}
+
+		if err := s.queue.Enqueue(ctx, "jobs:slow_queue", b); err != nil {
+			s.log.ErrorContext(ctx, "failed to enqueue slow embed job", "media_id", m.ID, "error", err)
+		} else {
+			s.log.DebugContext(ctx, "slow embed job enqueued", "media_id", m.ID)
 		}
 
 		out = append(out, ucdto.UploadResult{Status: ucdto.StatusSaved, Media: m})
