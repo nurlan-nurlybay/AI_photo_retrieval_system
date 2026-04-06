@@ -92,16 +92,23 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	}
 	log.Info("connected to Redis client", "addr", cfg.Redis.Addr)
 
-	awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
+	awsRegion := os.Getenv("AWS_REGION")
+	if awsRegion == "" {
+		awsRegion = "eu-north-1"
+	}
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(awsRegion))
 	if err != nil {
 		log.Fatal("failed to load aws config:", err)
 	}
-	bucketName := os.Getenv("AWS_S3_BUCKET")
+	bucketName := os.Getenv("S3_BUCKET_NAME")
+	if bucketName == "" {
+		bucketName = os.Getenv("AWS_S3_BUCKET") // fallback for compat
+	}
 	if bucketName == "" {
 		bucketName = "media"
 	}
 	store := storage.NewS3Client(awsCfg, bucketName)
-	log.Info("connected to S3 client", "bucket", bucketName)
+	log.Info("connected to S3 client", "bucket", bucketName, "region", awsRegion)
 
 	// Image processing libs
 	// TODO: cfg for vips and exif
