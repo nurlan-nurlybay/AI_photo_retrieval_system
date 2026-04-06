@@ -80,3 +80,124 @@ We utilize **GitHub Actions** for automated testing and deployment:
 
 ---
 *Developed as a Senior Project, 2026.*
+
+## Flowchart: The Storage / CI/CD Pipeline (Ingestion)
+
+```mermaid
+flowchart TD
+    %% Styling
+    classDef frontend fill:#E1F5FE,stroke:#03A9F4,stroke-width:2px;
+    classDef aws fill:#FFF3E0,stroke:#FF9800,stroke-width:2px;
+    classDef vast fill:#F3E5F5,stroke:#9C27B0,stroke-width:2px;
+    classDef cicd fill:#E8F5E9,stroke:#4CAF50,stroke-width:2px;
+    classDef db fill:#ECEFF1,stroke:#607D8B,stroke-width:2px;
+
+    %% CI/CD Environment
+    subgraph CICD ["🛠️ CI/CD & Registries"]
+        GH[GitHub Actions]
+        ECR[AWS ECR]
+        DH[DockerHub]
+    end
+
+    %% Client
+    Front["📱 Frontend (Client)"]:::frontend
+
+    %% External Storage
+    S3[("🪣 AWS S3 (eu-north-1)")]:::aws
+
+    %% AWS EC2 Environment
+    subgraph AWS ["☁️ AWS EC2 Instance (Orchestrator)"]
+        API["⚙️ Go Backend (API Gateway)"]:::aws
+        DB[("🐘 PostgreSQL")]:::db
+        Redis[("🟥 Redis (Queues & PubSub)")]:::db
+        VecAPI["🧩 Vector Service Adapter"]:::aws
+        Milvus[("🗄️ Milvus (Vector DB)")]:::db
+    end
+
+    %% GPU Environment
+    subgraph GPU ["🔥 Vast.ai / External GPU"]
+        FastW["⚡ Fast Worker (SigLIP)"]:::vast
+        SlowW["🐢 Slow Worker (Qwen-2-VL)"]:::vast
+    end
+
+    %% CI/CD Deployments (Dashed lines)
+    GH -.->|1. Push Backend Image| ECR
+    GH -.->|2. Push ML Image| DH
+    ECR -.->|3. EC2 Pulls Latest| API
+    DH -.->|4. Vast.ai Pulls Latest| FastW
+
+    %% Ingestion Execution Flow
+    Front == "1. POST Multi-part Image" ==> API
+    API == "2. Stream Image Bytes" ==> S3
+    S3 -- "3. Return Presigned URL" --> API
+    API -- "4. Insert Metadata (status: pending)" --> DB
+    
+    %% Async Queueing
+    API == "5. Round-Robin / Push S3 URL" ==> Redis
+    Redis -- "6a. Consume jobs:fast" --> FastW
+    Redis -- "6b. Consume jobs:slow" --> SlowW
+    
+    %% ML Processing
+    FastW -. "7a. Direct Download" .-> S3
+    SlowW -. "7b. Direct Download" .-> S3
+    FastW -- "8a. Generate Image Vector" --> VecAPI
+    SlowW -- "8b. Gen Caption & Vector" --> VecAPI
+    
+    %% Vector Storage
+    VecAPI -- "9. Insert ID & Vector" --> Milvus
+    
+    %% State Updates & Notification
+    FastW -- "10. Update (status: active)" --> DB
+    SlowW -- "10. Update (status: active)" --> DB
+    FastW -- "11. Publish 'Success' Event" --> Redis
+    SlowW -- "11. Publish 'Success' Event" --> Redis
+    Redis -- "12. Listen to Subscriptions" --> API
+    API == "13. WebSocket/Push Notify Processed" ==> Front
+    
+    %% Apply classes
+    GH:::cicd; ECR:::cicd; DH:::cicd;
+```
+
+## Flowchart: The Retrieval Pipeline (Search)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    
+    actor User as Frontend Client
+    participant API as Go Backend (AWS)
+    participant ML as ML Service (Vast.ai)
+    participant VS as Vector Service (AWS)
+    participant MV as Milvus DB (AWS)
+    participant DB as PostgreSQL (AWS)
+
+    Note over User, DB: Scenario: Natural Language Search ("white flowers on a tree")
+    
+    User->>API: POST /api/search/text {q: "white flowers"}
+    activate API
+    
+    API->>ML: Request Text Embedding
+    activate ML
+    Note right of ML: Utilizes "Fast Path" (SigLIP)<br/>Executes in milliseconds
+    ML-->>API: Return high-dimensional Vector
+    deactivate ML
+    
+    API->>VS: Search Nearest Neighbors (Vector, limit=5)
+    activate VS
+    VS->>MV: L2/Cosine Distance Query
+    activate MV
+    MV-->>VS: Return Top Matches (e.g., ID: 2, ID: 1)
+    deactivate MV
+    VS-->>API: Return Media IDs
+    deactivate VS
+    
+    API->>DB: SELECT * FROM media WHERE id IN (2, 1)
+    activate DB
+    DB-->>API: Return S3 URLs & Metadata
+    deactivate DB
+    
+    API-->>User: JSON Response {results: [URL_2, URL_1]}
+    deactivate API
+    
+    Note over User: UI renders fast S3 Presigned URLs instantly
+```
