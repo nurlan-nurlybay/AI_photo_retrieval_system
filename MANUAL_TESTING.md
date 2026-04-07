@@ -37,7 +37,11 @@ curl -X POST http://13.61.195.243/api/upload/image \
 * **Result:** 0 results returned (`total: 1` refers to total search matches within their namespace, which returned no images). **PASS**.
 * **Command:**
 ```bash
+<<<<<<< HEAD
 curl -X POST http://13.61.195.243/api/search/text\
+=======
+curl -X POST http://13.61.195.243/api/search/text \
+>>>>>>> 25af945aa83264155686a8ebcdb5f0d11a0709ac
   -H "Content-Type: application/json" \
   -d '{"user_id": 2, "q": "backpack", "limit": 2}'
 ```
