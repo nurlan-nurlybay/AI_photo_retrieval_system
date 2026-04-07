@@ -15,7 +15,7 @@ This document serves as the official manual testing record for the Multi-Tenant 
 * **Result:** Image successfully uploaded to S3 under `/media/1/...`, database assigned `id: 5`, status marked `active`.
 * **Command:**
 ```bash
-curl -X POST [http://13.61.195.243/api/upload/image](http://13.61.195.243/api/upload/image) \
+curl -X POST http://13.61.195.243/api/upload/image \
   -F "user_id=1" \
   -F "files[]=@backpack.jpg" \
   -F "dedup=true"
@@ -26,7 +26,7 @@ curl -X POST [http://13.61.195.243/api/upload/image](http://13.61.195.243/api/up
 * **Result:** Image successfully uploaded to S3 under `/media/2/...`, database assigned `id: 6`, status marked `active`.
 * **Command:**
 ```bash
-curl -X POST [http://13.61.195.243/api/upload/image](http://13.61.195.243/api/upload/image) \
+curl -X POST http://13.61.195.243/api/upload/image \
   -F "user_id=2" \
   -F "files[]=@glasses.jpg" \
   -F "dedup=true"
@@ -37,7 +37,7 @@ curl -X POST [http://13.61.195.243/api/upload/image](http://13.61.195.243/api/up
 * **Result:** 0 results returned (`total: 1` refers to total search matches within their namespace, which returned no images). **PASS**.
 * **Command:**
 ```bash
-curl -X POST [http://13.61.195.243/api/search/text](http://13.61.195.243/api/search/text) \
+curl -X POST http://13.61.195.243/api/search/text \
   -H "Content-Type: application/json" \
   -d '{"user_id": 2, "q": "backpack", "limit": 2}'
 ```
@@ -47,7 +47,7 @@ curl -X POST [http://13.61.195.243/api/search/text](http://13.61.195.243/api/sea
 * **Result:** Successfully returned `id: 5` (backpack.jpg). **PASS**.
 * **Command:**
 ```bash
-curl -X POST [http://13.61.195.243/api/search/text](http://13.61.195.243/api/search/text) \
+curl -X POST http://13.61.195.243/api/search/text \
   -H "Content-Type: application/json" \
   -d '{"user_id": 1, "q": "backpack", "limit": 2}'
 ```
@@ -63,7 +63,7 @@ curl -X POST [http://13.61.195.243/api/search/text](http://13.61.195.243/api/sea
 * **Result:** Both images successfully saved, status active.
 * **Command:**
 ```bash
-curl -X POST [http://13.61.195.243/api/upload/image](http://13.61.195.243/api/upload/image) \
+curl -X POST http://13.61.195.243/api/upload/image \
   -F "user_id=1" \
   -F "files[]=@hand.jpg" \
   -F "files[]=@lipstick.jpg"
@@ -74,7 +74,7 @@ curl -X POST [http://13.61.195.243/api/upload/image](http://13.61.195.243/api/up
 * **Result:** Successfully returned `id: 7` (`hand.jpg`) as the primary result. **PASS**.
 * **Command:**
 ```bash
-curl -X POST [http://13.61.195.243/api/search/text](http://13.61.195.243/api/search/text) \
+curl -X POST http://13.61.195.243/api/search/text \
   -H "Content-Type: application/json" \
   -d '{"user_id": 1, "q": "hand", "limit": 2}'
 ```
@@ -90,7 +90,7 @@ curl -X POST [http://13.61.195.243/api/search/text](http://13.61.195.243/api/sea
 * **Result:** API returned `{"ok":true,"message":"deleted 1 images for user 1"}`. **PASS**.
 * **Command:**
 ```bash
-curl -X DELETE [http://13.61.195.243/api/user/images/delete-batch](http://13.61.195.243/api/user/images/delete-batch) \
+curl -X DELETE http://13.61.195.243/api/user/images/delete-batch \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": 1,
@@ -103,7 +103,7 @@ curl -X DELETE [http://13.61.195.243/api/user/images/delete-batch](http://13.61.
 * **Result:** Success (Verified via blank terminal return, no errors thrown by Go router). **PASS**.
 * **Command:**
 ```bash
-curl -X DELETE [http://13.61.195.243/api/user/images/clear](http://13.61.195.243/api/user/images/clear) \
+curl -X DELETE http://13.61.195.243/api/user/images/clear \
   -H "Content-Type: application/json" \
   -d '{"user_id": 2}'
 ```
@@ -113,7 +113,7 @@ curl -X DELETE [http://13.61.195.243/api/user/images/clear](http://13.61.195.243
 * **Result:** API returned `{"ok":true,"message":"account and all data nuked for user 1"}`. **PASS**.
 * **Command:**
 ```bash
-curl -X DELETE [http://13.61.195.243/api/user/account](http://13.61.195.243/api/user/account) \
+curl -X DELETE http://13.61.195.243/api/user/account \
   -H "Content-Type: application/json" \
   -d '{"user_id": 1}'
 ```
