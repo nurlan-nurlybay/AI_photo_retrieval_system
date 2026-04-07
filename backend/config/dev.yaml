@@ -3,21 +3,12 @@ version: "1.0.0"
 http:
   host: "0.0.0.0"
   port: 8080
-<<<<<<< HEAD
-  readTimeout: 5s
-  writeTimeout: 5s
-  idleTimeout: 30s
-
-postgres:
-  host: "localhost"  # hostname -I
-=======
   readTimeout: "5s"
   writeTimeout: "5s"
   idleTimeout: "30s"
 
 postgres:
   host: "localhost"
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
   port: 5433
   user: "postgres"
   password: "postgres"
@@ -25,29 +16,17 @@ postgres:
   sslmode: "disable"
   maxOpenConns: 10
   maxIdleConns: 5
-<<<<<<< HEAD
-  connMaxLifetime: 1h
-  connMaxIdleTime: 600s
-  healthCheckPeriod: 300s
-=======
   connMaxLifetime: "1h"
   connMaxIdleTime: "10m"
   healthCheckPeriod: "5m"
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 
 redis:
   addr: "localhost:6380"
   password: ""
   db: 0
-<<<<<<< HEAD
-  dialTimeout: 5s
-  readTimeout: 5s
-  writeTimeout: 5s
-=======
   dialTimeout: "5s"
   readTimeout: "5s"
   writeTimeout: "5s"
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
   poolSize: 10
 
 seaweedfs:
@@ -60,14 +39,8 @@ clip:
 faiss:
   host: "localhost"
   port: 8006
-<<<<<<< HEAD
-  
-log:
-  level: "debug" 
-=======
 
 log:
   level: "debug"
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
   format: "text"
   sourceFolder: "backend"

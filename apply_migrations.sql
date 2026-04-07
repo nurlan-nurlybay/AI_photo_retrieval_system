@@ -14,13 +14,9 @@ CREATE TABLE IF NOT EXISTS media (
     camera_make     TEXT,
     camera_model    TEXT,
     software        TEXT,
-<<<<<<< HEAD
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-=======
     local_path      TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     status          TEXT        NOT NULL DEFAULT 'pending',
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 
     CONSTRAINT media_user_checksum_uniq UNIQUE (user_id, checksum)
 );
@@ -36,11 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_media_datetime
 
 -- Migration 0002: Add Embeddings
 CREATE TABLE IF NOT EXISTS embeddings (
-<<<<<<< HEAD
-  media_id   BIGINT PRIMARY KEY REFERENCES media(id) ON DELETE CASCADE,
-=======
   media_id   BIGINT REFERENCES media(id) ON DELETE CASCADE,
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
   user_id BIGINT NOT NULL, 
   model      TEXT   NOT NULL,
   vec_bytes  BYTEA  NOT NULL,
@@ -48,10 +40,7 @@ CREATE TABLE IF NOT EXISTS embeddings (
   last_error TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-<<<<<<< HEAD
-=======
   PRIMARY KEY (media_id, model),
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
   CHECK (octet_length(vec_bytes) % 4 = 0)
 );
 

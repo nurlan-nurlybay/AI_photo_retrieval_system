@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 # model analysis
 nurlan_images/
 alibek_images/
@@ -16,7 +14,6 @@ evaluation_dataset/
 
 # ...
 
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 bin/
 seaweed_data/
 .venv/
@@ -211,8 +208,6 @@ data/
 
 # 2. Exclude/Un-ignore the critical metadata folder to allow tracking (overrides rule #1)
 !data/USED/CSV files for SED-EImm/
-<<<<<<< HEAD
-=======
 eval_data/
 *.png
 
@@ -223,4 +218,3 @@ photo-backend
 
 *.deb
 *.pem
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1

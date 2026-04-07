@@ -7,11 +7,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-<<<<<<< HEAD
-=======
 	"net/url"
 	"strings"
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	"time"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/domain"
@@ -23,12 +20,9 @@ import (
 type MediaService interface {
 	UploadBatch(ctx context.Context, items []ucdto.UploadInput) ([]ucdto.UploadResult, error)
 	Delete(ctx context.Context, userID, mediaID int64) error
-<<<<<<< HEAD
-=======
 	DeleteBatch(ctx context.Context, userID int64, imageIDs []int64) error
 	ClearGallery(ctx context.Context, userID int64) error
 	DeleteAccount(ctx context.Context, userID int64) error
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	GetByID(ctx context.Context, userID, mediaID int64) (*domain.Media, error)
 	List(ctx context.Context, f domain.MediaFilter, p domain.Page, s domain.Sort) ([]*domain.Media, int, error)
 }
@@ -37,10 +31,7 @@ type (
 	ObjectStorage interface {
 		Put(ctx context.Context, key string, r *bytes.Reader) (publicURL string, err error)
 		Delete(ctx context.Context, key string) error
-<<<<<<< HEAD
-=======
 		GeneratePresignedURL(ctx context.Context, key string, expiration time.Duration) (string, error)
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	}
 
 	ImageProcessor interface {
@@ -65,22 +56,6 @@ type (
 )
 
 type mediaService struct {
-<<<<<<< HEAD
-	vectorIndex VectorIndex
-
-	repo  domain.MediaRepository
-	store ObjectStorage
-	queue Queue // wraps Redis
-	img   ImageProcessor
-	meta  MetadataExtractor
-	clock func() time.Time
-	log   *logger.Logger
-}
-
-func NewMediaService(
-	milvus VectorIndex,
-
-=======
 	vectorClient VectorClient
 	repo         domain.MediaRepository
 	store        ObjectStorage
@@ -93,7 +68,6 @@ func NewMediaService(
 
 func NewMediaService(
 	vc VectorClient,
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	repo domain.MediaRepository,
 	store ObjectStorage,
 	queue Queue,
@@ -102,17 +76,6 @@ func NewMediaService(
 	log *logger.Logger,
 ) MediaService {
 	return &mediaService{
-<<<<<<< HEAD
-		vectorIndex: milvus,
-
-		repo:  repo,
-		store: store,
-		queue: queue,
-		img:   img,
-		meta:  meta,
-		clock: time.Now,
-		log:   log,
-=======
 		vectorClient: vc,
 		repo:         repo,
 		store:        store,
@@ -121,7 +84,6 @@ func NewMediaService(
 		meta:         meta,
 		clock:        time.Now,
 		log:          log,
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	}
 }
 
@@ -199,10 +161,7 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 			Checksum:  checksum,
 			CreatedAt: s.clock().UTC(),
 			LocalPath: it.LocalPath,
-<<<<<<< HEAD
-=======
 			Status:    "active",
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 			Metadata: domain.Metadata{
 				DateTimeOriginal: meta.DateTimeOriginal,
 				Orientation:      meta.Orientation,
@@ -217,15 +176,6 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 		mediaID, err := s.repo.Create(ctx, m)
 		if err != nil {
 			s.log.ErrorContext(ctx, "failed to persist media", "index", i, "error", err)
-<<<<<<< HEAD
-			_ = s.store.Delete(ctx, m.URL)
-			_ = s.store.Delete(ctx, m.ThumbURL)
-			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
-			continue
-		}
-
-		//  enqueue embedding job
-=======
 			_ = s.store.Delete(ctx, keyOrig)
 			_ = s.store.Delete(ctx, keyThumb)
 			out = append(out, ucdto.UploadResult{Status: ucdto.StatusFailed, Err: err})
@@ -233,19 +183,12 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 		}
 		m.ID = mediaID
 
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 		job := ucdto.EmbedJob{
 			UserID:   m.UserID,
 			MediaID:  mediaID,
 			Modality: "image",
 		}
 		b, _ := json.Marshal(job)
-<<<<<<< HEAD
-		if err := s.queue.Enqueue(ctx, "jobs:embed", b); err != nil {
-			s.log.ErrorContext(ctx, "failed to enqueue job", "media_id", m.ID, "error", err)
-		} else {
-			s.log.DebugContext(ctx, "job enqueued", "media_id", m.ID, "queue", "jobs:embed")
-=======
 		if err := s.queue.Enqueue(ctx, "jobs:fast_queue", b); err != nil {
 			s.log.ErrorContext(ctx, "failed to enqueue fast embed job", "media_id", m.ID, "error", err)
 		} else {
@@ -256,7 +199,6 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 			s.log.ErrorContext(ctx, "failed to enqueue slow embed job", "media_id", m.ID, "error", err)
 		} else {
 			s.log.DebugContext(ctx, "slow embed job enqueued", "media_id", m.ID)
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 		}
 
 		out = append(out, ucdto.UploadResult{Status: ucdto.StatusSaved, Media: m})
@@ -267,25 +209,12 @@ func (s *mediaService) UploadBatch(ctx context.Context, items []ucdto.UploadInpu
 	return out, nil
 }
 
-<<<<<<< HEAD
-=======
 // Delete removes a single image. Cascade: S3 -> Postgres -> Vector Service.
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 func (s *mediaService) Delete(ctx context.Context, userID, mediaID int64) error {
 	media, err := s.repo.Get(ctx, userID, mediaID)
 	if err != nil {
 		return err
 	}
-<<<<<<< HEAD
-
-	// TODO: handle delete from milvus, pg, seaweedfs
-	_ = s.vectorIndex.Delete(ctx, mediaID)
-
-	_ = s.store.Delete(ctx, media.URL)
-	_ = s.store.Delete(ctx, media.ThumbURL)
-
-	_ = s.repo.Delete(ctx, userID, mediaID)
-=======
 	if media == nil {
 		return fmt.Errorf("media %d not found for user %d", mediaID, userID)
 	}
@@ -301,13 +230,10 @@ func (s *mediaService) Delete(ctx context.Context, userID, mediaID int64) error 
 
 	// 3. Vector Service
 	_ = s.vectorClient.DeleteItems(ctx, userID, []int64{mediaID})
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 
 	return nil
 }
 
-<<<<<<< HEAD
-=======
 // DeleteBatch removes specific image IDs. Cascade: S3 -> Postgres -> Vector Service.
 func (s *mediaService) DeleteBatch(ctx context.Context, userID int64, imageIDs []int64) error {
 	s.log.InfoContext(ctx, "delete batch started", "user_id", userID, "count", len(imageIDs))
@@ -402,7 +328,6 @@ func (s *mediaService) DeleteAccount(ctx context.Context, userID int64) error {
 	return nil
 }
 
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 func (s *mediaService) GetByID(ctx context.Context, userID, mediaID int64) (*domain.Media, error) {
 	m, err := s.repo.Get(ctx, userID, mediaID)
 	if err != nil {
@@ -432,8 +357,6 @@ func (s *mediaService) List(
 	return items, total, nil
 }
 
-<<<<<<< HEAD
-=======
 func extractKey(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -442,5 +365,4 @@ func extractKey(rawURL string) string {
 	return strings.TrimPrefix(u.Path, "/")
 }
 
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 var _ MediaService = (*mediaService)(nil)

@@ -16,14 +16,9 @@ type SearchImageRequest struct {
 }
 
 type SearchResponse struct {
-<<<<<<< HEAD
-	Results []MediaResponse `json:"results"`
-	Total   int             `json:"total"`
-=======
 	Results  []MediaResponse `json:"results"`
 	Total    int             `json:"total"`
 	UsedQwen bool            `json:"used_qwen"`
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 }
 
 type MediaResponse struct {
@@ -37,10 +32,7 @@ type MediaResponse struct {
 
 // ===== Upload Image =====
 type UploadRequest struct {
-<<<<<<< HEAD
-=======
 	UserID     int64                   `form:"user_id" binding:"required,min=1"`
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	Files      []*multipart.FileHeader `form:"files[]" binding:"required,min=1,max=100"`
 	Dedup      bool                    `form:"dedup,default=true"`
 	LocalPaths []string                `form:"local_paths[]"`
@@ -76,13 +68,8 @@ type UserImagesListResponse struct {
 }
 
 type UserImageGetRequest struct {
-<<<<<<< HEAD
-	UserID  int64 `json:"user_id" binding:"required"`
-	ImageID int64 `json:"image_id" binding:"required"`
-=======
 	UserID  int64 `form:"user_id" binding:"required"`
 	ImageID int64 `form:"image_id" binding:"required"`
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 }
 
 type UserImageDeleteRequest struct {
@@ -107,8 +94,6 @@ type MediaItem struct {
 	TakenAt   string `json:"taken_at,omitempty"` // RFC3339, empty if unknown
 	CreatedAt string `json:"created_at"`         // RFC3339
 	LocalPath string `json:"local_path,omitempty"`
-<<<<<<< HEAD
-=======
 	Status    string `json:"status"`             // "pending", "fast_encoded", "slow_encoded"
 }
 
@@ -129,5 +114,4 @@ type DeleteAccountRequest struct {
 type DeleteResponse struct {
 	OK      bool   `json:"ok"`
 	Message string `json:"message"`
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 }

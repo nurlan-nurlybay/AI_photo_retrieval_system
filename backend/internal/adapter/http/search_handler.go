@@ -38,21 +38,14 @@ func (h *SearchHandler) SearchByText(c *gin.Context) {
 		k = 200
 	}
 
-<<<<<<< HEAD
-	mediaWithScore, err := h.searchUC.SearchByText(c.Request.Context(), req.UserID, req.Query, k)
-=======
 	mediaWithScore, usedQwen, err := h.searchUC.SearchByText(c.Request.Context(), req.UserID, req.Query, k)
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
 	var resp httpdto.SearchResponse
-<<<<<<< HEAD
-=======
 	resp.UsedQwen = usedQwen
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	resp.Results = make([]httpdto.MediaResponse, 0, len(mediaWithScore))
 
 	for _, r := range mediaWithScore {
@@ -99,21 +92,14 @@ func (h *SearchHandler) SearchByImage(c *gin.Context) {
 		return
 	}
 
-<<<<<<< HEAD
-	mediaWithScore, err := h.searchUC.SearchByImage(c.Request.Context(), req.UserID, imgBytes, 10)
-=======
 	mediaWithScore, usedQwen, err := h.searchUC.SearchByImage(c.Request.Context(), req.UserID, imgBytes, 10)
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
 
 	var resp httpdto.SearchResponse
-<<<<<<< HEAD
-=======
 	resp.UsedQwen = usedQwen
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	resp.Results = make([]httpdto.MediaResponse, 0, len(mediaWithScore))
 
 	for _, r := range mediaWithScore {

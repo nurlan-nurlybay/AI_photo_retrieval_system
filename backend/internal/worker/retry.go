@@ -5,10 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-<<<<<<< HEAD
-=======
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/vector"
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	ucdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase/dto"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/utils"
 )
@@ -16,11 +13,7 @@ import (
 // sweep pending/failed, replay to FAISS, set status
 type RetryWorker struct {
 	EmbeddingsRepo EmbeddingsRepo
-<<<<<<< HEAD
-	Faiss          VectorIndex
-=======
 	VectorClient   VectorClient
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	Interval       time.Duration // e.g. 1 * time.Second
 	Batch          int           // e.g. 500
 
@@ -54,15 +47,6 @@ func (w *RetryWorker) Run(ctx context.Context) error {
 }
 
 func (w *RetryWorker) step(ctx context.Context) {
-<<<<<<< HEAD
-	// 1. Replay existing pending/failed embeddings into FAISS
-	ids, err := w.EmbeddingsRepo.ListUnindexed(ctx, 0, w.Batch)
-	if err == nil && len(ids) > 0 {
-		for _, mediaID := range ids {
-			vb, err := w.EmbeddingsRepo.GetEmbeddingBytes(ctx, 0, mediaID)
-			if err != nil || len(vb) == 0 {
-				_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, utils.TruncateErr(err))
-=======
 	// 1. Replay existing pending/failed embeddings into vector service
 	refs, err := w.EmbeddingsRepo.ListUnindexed(ctx, 0, w.Batch)
 	if err == nil && len(refs) > 0 {
@@ -70,22 +54,10 @@ func (w *RetryWorker) step(ctx context.Context) {
 			vb, err := w.EmbeddingsRepo.GetEmbeddingBytes(ctx, ref.UserID, ref.MediaID)
 			if err != nil || len(vb) == 0 {
 				_ = w.EmbeddingsRepo.MarkFailed(ctx, ref.UserID, ref.MediaID, utils.TruncateErr(err))
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 				continue
 			}
 			vec := utils.BytesToFloat32(vb)
 
-<<<<<<< HEAD
-			if err := w.Faiss.Insert(ctx, 404, mediaID, vec); err != nil {
-				if isAlreadyExists(err, w.AlreadyExistsSubstrings) {
-					_ = w.EmbeddingsRepo.MarkInIndex(ctx, 404, mediaID)
-					continue
-				}
-				_ = w.EmbeddingsRepo.MarkFailed(ctx, 404, mediaID, utils.TruncateErr(err))
-				continue
-			}
-			_ = w.EmbeddingsRepo.MarkInIndex(ctx, 404, mediaID)
-=======
 			item := vector.IngestItem{
 				ImageID: ref.MediaID,
 				Vector:  vec,
@@ -99,7 +71,6 @@ func (w *RetryWorker) step(ctx context.Context) {
 				continue
 			}
 			_ = w.EmbeddingsRepo.MarkInIndex(ctx, ref.UserID, ref.MediaID)
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 		}
 	}
 
@@ -115,17 +86,10 @@ func (w *RetryWorker) step(ctx context.Context) {
 	if queueKey == "" {
 		queueKey = "jobs:embed"
 	}
-<<<<<<< HEAD
-	for _, mediaID := range unembedded {
-		job := ucdto.EmbedJob{
-			UserID:   404,
-			MediaID:  mediaID,
-=======
 	for _, ref := range unembedded {
 		job := ucdto.EmbedJob{
 			UserID:   ref.UserID,
 			MediaID:  ref.MediaID,
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 			Modality: "image",
 		}
 		payload, err := json.Marshal(job)

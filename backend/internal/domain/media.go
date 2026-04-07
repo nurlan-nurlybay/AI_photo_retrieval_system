@@ -15,10 +15,7 @@ type Media struct {
 	Checksum  string // e.g. SHA256 for dedup
 	CreatedAt time.Time
 	LocalPath string
-<<<<<<< HEAD
-=======
 	Status    string
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	Metadata  Metadata
 }
 
@@ -34,14 +31,9 @@ type Metadata struct {
 
 // Return response
 type MediaWithScore struct {
-<<<<<<< HEAD
-	Media *Media
-	Score float32
-=======
 	Media    *Media
 	Score    float32
 	UsedQwen bool
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 }
 
 // Query helpers
@@ -71,11 +63,8 @@ type MediaRepository interface {
 
 	// dedup helper
 	GetByChecksum(ctx context.Context, uID int64, checksum string) (*Media, error)
-<<<<<<< HEAD
-=======
 
 	// bulk deletion helpers
 	ListAllByUser(ctx context.Context, userID int64) ([]*Media, error)
 	DeleteAllByUser(ctx context.Context, userID int64) error
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 }

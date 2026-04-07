@@ -10,23 +10,17 @@ import (
 	"context"
 	"os"
 
-<<<<<<< HEAD
-=======
 	"github.com/joho/godotenv"
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/app"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
 )
 
 func main() {
-<<<<<<< HEAD
-=======
 	// Dynamically read the environment variables from .env
 	_ = godotenv.Load("../.env")
 	_ = godotenv.Load(".env")
 
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
 		configPath = "./config/dev.yaml" // default fallback

@@ -31,10 +31,7 @@ const (
 	OrientCol    = "orientation"
 	CreatedAtCol = "created_at"
 	LocalPathCol = "local_path"
-<<<<<<< HEAD
-=======
 	StatusCol    = "status"
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 )
 
 var _ domain.MediaRepository = (*MediaRepo)(nil)
@@ -58,22 +55,14 @@ func (r *MediaRepo) Create(ctx context.Context, m *domain.Media) (int64, error) 
 		Columns(
 			UserIDCol, URLCol, ThumbURLCol, MimeTypeCol, SizeBytesCol,
 			ChecksumCol, CreatedAtCol, TakenAtCol, WidthCol, HeightCol,
-<<<<<<< HEAD
-			MakeCol, ModelCol, SoftwareCol, OrientCol, LocalPathCol,
-=======
 			MakeCol, ModelCol, SoftwareCol, OrientCol, LocalPathCol, StatusCol,
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 		).
 		Values(
 			m.UserID, m.URL, m.ThumbURL, m.MimeType, m.SizeBytes,
 			m.Checksum, m.CreatedAt, m.Metadata.DateTimeOriginal,
 			m.Metadata.Width, m.Metadata.Height,
 			m.Metadata.CameraMake, m.Metadata.CameraModel,
-<<<<<<< HEAD
-			m.Metadata.Software, m.Metadata.Orientation, m.LocalPath,
-=======
 			m.Metadata.Software, m.Metadata.Orientation, m.LocalPath, m.Status,
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 		).
 		Suffix("RETURNING id").
 		PlaceholderFormat(squirrel.Dollar).
@@ -108,11 +97,7 @@ func (r *MediaRepo) Get(ctx context.Context, userID, mediaID int64) (*domain.Med
 		Select(
 			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol, SizeBytesCol,
 			ChecksumCol, CreatedAtCol, TakenAtCol, OrientCol, WidthCol, HeightCol,
-<<<<<<< HEAD
-			MakeCol, ModelCol, SoftwareCol, LocalPathCol,
-=======
 			MakeCol, ModelCol, SoftwareCol, LocalPathCol, StatusCol,
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 		).
 		From(TableName).
 		Where(squirrel.Eq{IDCol: mediaID, UserIDCol: userID}).
@@ -136,11 +121,7 @@ func (r *MediaRepo) Get(ctx context.Context, userID, mediaID int64) (*domain.Med
 		&m.ID, &m.UserID, &m.URL, &m.ThumbURL, &m.MimeType, &m.SizeBytes,
 		&m.Checksum, &m.CreatedAt, &meta.DateTimeOriginal, &meta.Orientation,
 		&meta.Width, &meta.Height, &meta.CameraMake, &meta.CameraModel, &meta.Software,
-<<<<<<< HEAD
-		&m.LocalPath,
-=======
 		&m.LocalPath, &m.Status,
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -159,11 +140,7 @@ func (r *MediaRepo) GetByChecksum(ctx context.Context, userID int64, checksum st
 		Select(
 			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol, SizeBytesCol,
 			ChecksumCol, CreatedAtCol, TakenAtCol, WidthCol, HeightCol,
-<<<<<<< HEAD
-			MakeCol, ModelCol, SoftwareCol, OrientCol, LocalPathCol,
-=======
 			MakeCol, ModelCol, SoftwareCol, OrientCol, LocalPathCol, StatusCol,
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 		).
 		From(TableName).
 		Where(squirrel.Eq{UserIDCol: userID, ChecksumCol: checksum}).
@@ -187,11 +164,7 @@ func (r *MediaRepo) GetByChecksum(ctx context.Context, userID int64, checksum st
 		&m.ID, &m.UserID, &m.URL, &m.ThumbURL, &m.MimeType, &m.SizeBytes,
 		&m.Checksum, &m.CreatedAt, &meta.DateTimeOriginal, &meta.Width,
 		&meta.Height, &meta.CameraMake, &meta.CameraModel, &meta.Software,
-<<<<<<< HEAD
-		&meta.Orientation, &m.LocalPath,
-=======
 		&meta.Orientation, &m.LocalPath, &m.Status,
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -211,11 +184,7 @@ func (r *MediaRepo) List(ctx context.Context, f domain.MediaFilter, p domain.Pag
 			IDCol, UserIDCol, URLCol, ThumbURLCol, MimeTypeCol,
 			SizeBytesCol, ChecksumCol, CreatedAtCol, TakenAtCol,
 			WidthCol, HeightCol, MakeCol, ModelCol, SoftwareCol,
-<<<<<<< HEAD
-			OrientCol, LocalPathCol,
-=======
 			OrientCol, LocalPathCol, StatusCol,
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 		).
 		From(TableName).
 		PlaceholderFormat(squirrel.Dollar)
@@ -287,11 +256,7 @@ func (r *MediaRepo) List(ctx context.Context, f domain.MediaFilter, p domain.Pag
 			&m.SizeBytes, &m.Checksum, &m.CreatedAt,
 			&meta.DateTimeOriginal, &meta.Width, &meta.Height,
 			&meta.CameraMake, &meta.CameraModel, &meta.Software,
-<<<<<<< HEAD
-			&meta.Orientation, &m.LocalPath,
-=======
 			&meta.Orientation, &m.LocalPath, &m.Status,
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan media: %w", err)
 		}
@@ -367,8 +332,6 @@ func (r *MediaRepo) Delete(ctx context.Context, userID, id int64) error {
 
 	return nil
 }
-<<<<<<< HEAD
-=======
 
 func (r *MediaRepo) UpdateStatus(ctx context.Context, userID, id int64, status string) error {
 	query, args, err := squirrel.
@@ -465,4 +428,3 @@ func (r *MediaRepo) DeleteAllByUser(ctx context.Context, userID int64) error {
 
 	return nil
 }
->>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
