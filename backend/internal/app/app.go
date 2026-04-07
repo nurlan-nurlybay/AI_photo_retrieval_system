@@ -6,22 +6,38 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+<<<<<<< HEAD
+=======
+	"strconv"
+>>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	"syscall"
 	"time"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	clipadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/clip"
+<<<<<<< HEAD
 	faissadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/faiss"
+=======
+>>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	httpadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/http"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/imageproc"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/metadata"
 	postgresadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/postgres"
 	redisadapter "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/redis"
+<<<<<<< HEAD
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/worker"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/seaweedfs"
 
+=======
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/vector"
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/worker"
+	"golang.org/x/sync/errgroup"
+
+	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/storage"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+>>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/logger"
 )
@@ -41,9 +57,19 @@ type App struct {
 
 func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, error) {
 	// Conn to DB
+<<<<<<< HEAD
 	log.Info("loading Postgres", "DSN", cfg.Postgres.DSN())
 
 	dbClient := InitDB(ctx, cfg.Postgres.DSN())
+=======
+	postgresDSN := os.Getenv("POSTGRES_DSN")
+	if postgresDSN == "" {
+		postgresDSN = cfg.Postgres.DSN()
+	}
+	log.Info("loading Postgres", "DSN", postgresDSN)
+
+	dbClient := InitDB(ctx, postgresDSN)
+>>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	mediaRepo := postgresadapter.NewMediaRepo(dbClient)
 	embeddingsRepo := postgresadapter.NewEmbeddingsRepo(dbClient)
 
@@ -58,6 +84,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	fmt.Println("httpClient", httpClient.Timeout)
 
 	// Prep dependencies
+<<<<<<< HEAD
 	clipClient, err := clipadapter.NewClient(ctx, cfg.Clip, httpClient)
 	if err != nil {
 		log.Fatal("failed to conn clip:", err)
@@ -122,6 +149,96 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 		Handler: router,
 	}
 
+=======
+	var clipClient usecase.Embedder
+	if mlURL := os.Getenv("ML_SERVICE_URL"); mlURL != "" {
+		clipClient = clipadapter.NewClientFromURL(mlURL, httpClient)
+		log.Info("connected to CLIP client via env", "url", mlURL)
+	} else {
+		var err error
+		clipClient, err = clipadapter.NewClient(ctx, cfg.Clip, httpClient)
+		if err != nil {
+			log.Fatal("failed to conn clip:", err)
+		}
+		log.Info("connected to CLIP client via config", "host", cfg.Clip.Host, "port", cfg.Clip.Port)
+	}
+
+	vectorSvcURL := os.Getenv("VECTOR_SERVICE_URL")
+	if vectorSvcURL == "" {
+		vectorSvcURL = fmt.Sprintf("http://%s:%d", cfg.Faiss.Host, cfg.Faiss.Port)
+	}
+	vectorClient := vector.NewClient(vector.Config{URL: vectorSvcURL}, httpClient)
+	log.Info("connected to Vector Service HTTP client", "url", vectorSvcURL)
+
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		cfg.Redis.Addr = redisURL
+	}
+	redisClient, err := redisadapter.NewClient(ctx, cfg)
+	if err != nil {
+		log.Fatal("failed to conn redis:", err)
+	}
+	log.Info("connected to Redis client", "addr", cfg.Redis.Addr)
+
+	awsRegion := os.Getenv("AWS_REGION")
+	if awsRegion == "" {
+		awsRegion = "eu-north-1"
+	}
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(awsRegion))
+	if err != nil {
+		log.Fatal("failed to load aws config:", err)
+	}
+	bucketName := os.Getenv("S3_BUCKET_NAME")
+	if bucketName == "" {
+		bucketName = os.Getenv("AWS_S3_BUCKET") // fallback for compat
+	}
+	if bucketName == "" {
+		bucketName = "media"
+	}
+	store := storage.NewS3Client(awsCfg, bucketName)
+	log.Info("connected to S3 client", "bucket", bucketName, "region", awsRegion)
+
+	// Image processing libs
+	// TODO: cfg for vips and exif
+	imgProc := imageproc.NewVipsProcessor(512, 100)
+	metaExt := metadata.NewExifExtractor()
+
+	// Setup app services
+	searchSvc := usecase.NewSearchService(mediaRepo, clipClient, vectorClient, store, log)
+	mediaSvc := usecase.NewMediaService(vectorClient, mediaRepo, store, redisClient, imgProc, metaExt, log)
+
+	// Setup workers
+	ew := &worker.EmbedWorker{
+		Q:              redisClient,
+		EmbeddingsRepo: embeddingsRepo,
+		MediaRepo:      mediaRepo,
+		Storage:        store,
+		Clip:           clipClient,
+		Vector:         vectorClient,
+		ModelID:        "open_clip:ViT-L/14@336px",
+		FastQueueKey:   "jobs:fast_queue",
+		SlowQueueKey:   "jobs:slow_queue",
+		IdleDelay:      2 * time.Second,
+		Log:            log,
+	}
+	rw := &worker.RetryWorker{
+		EmbeddingsRepo:          embeddingsRepo,
+		VectorClient:            vectorClient,
+		Queue:                   redisClient,
+		QueueKey:                "jobs:fast_queue",
+		Interval:                30 * time.Second,
+		Batch:                   500,
+		AlreadyExistsSubstrings: []string{"already exists", "duplicate id"},
+	}
+
+	// Wire handlers
+	router := httpadapter.SetupRoutes(redisClient, searchSvc, mediaSvc, log)
+
+	srv := &http.Server{
+		Addr:    fmt.Sprintf("%s:%d", cfg.HTTP.Host, cfg.HTTP.Port),
+		Handler: router,
+	}
+
+>>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 	return &App{
 		Logger:      log,
 		SearchSvc:   searchSvc,
@@ -147,11 +264,45 @@ func (a *App) Run(ctx context.Context) error {
 		return nil
 	})
 
+<<<<<<< HEAD
 	// EmbedWorker
 	g.Go(func() error {
 		a.Logger.Info("starting EmbedWorker")
 		return a.EmbedWorker.Run(ctx)
 	})
+=======
+	// EmbedWorker Pool
+	fastWorkers := 10
+	if val := os.Getenv("EMBED_FAST_WORKERS"); val != "" {
+		if c, err := strconv.Atoi(val); err == nil {
+			fastWorkers = c
+		}
+	}
+	slowWorkers := 5
+	if val := os.Getenv("EMBED_SLOW_WORKERS"); val != "" {
+		if c, err := strconv.Atoi(val); err == nil {
+			slowWorkers = c
+		}
+	}
+
+	a.Logger.Info("starting EmbedWorker pools", "fastWorkers", fastWorkers, "slowWorkers", slowWorkers)
+	for i := 0; i < fastWorkers; i++ {
+		g.Go(func() error {
+			ew := *a.EmbedWorker
+			ew.FastQueueKey = "jobs:fast_queue"
+			ew.SlowQueueKey = ""
+			return ew.Run(ctx)
+		})
+	}
+	for i := 0; i < slowWorkers; i++ {
+		g.Go(func() error {
+			ew := *a.EmbedWorker
+			ew.FastQueueKey = ""
+			ew.SlowQueueKey = "jobs:slow_queue"
+			return ew.Run(ctx)
+		})
+	}
+>>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
 
 	// RetryWorker
 	g.Go(func() error {

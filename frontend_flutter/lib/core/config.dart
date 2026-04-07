@@ -4,22 +4,23 @@ import 'package:frontend_flutter/data/models.dart';
 /// Central configuration for environment + endpoints.
 /// Edit here, not all over the codebase.
 class AppConfig {
-  /// 1) Base URL provided at run-time with:
-  /// flutter run ... --dart-define=BACKEND_BASE_URL=http://127.0.0.1:8080
+  /// 1) Base URL — Production backend on AWS EC2 (Stockholm, eu-north-1).
+  ///    Override at run-time with:
+  ///    flutter run ... --dart-define=BACKEND_BASE_URL=http://13.61.195.243
   static const String _rawBaseUrl =
-      String.fromEnvironment('BACKEND_BASE_URL', defaultValue: 'http://10.0.2.2:8080');
+      String.fromEnvironment('BACKEND_BASE_URL', defaultValue: 'http://13.61.195.243');
 
-  /// 2) Normalize addresses per platform
+  /// 2) Normalize addresses per platform.
+  ///    Since the backend is now a public IP, platform rewrites are only
+  ///    needed when someone explicitly passes localhost/10.0.2.2 for local dev.
   static String get baseUrl {
     if (Platform.isAndroid) {
-      // Android emulator: 10.0.2.2 maps to host localhost
       if (_rawBaseUrl.contains('127.0.0.1') || _rawBaseUrl.contains('localhost')) {
         return _rawBaseUrl
             .replaceFirst('127.0.0.1', '10.0.2.2')
             .replaceFirst('localhost', '10.0.2.2');
       }
     } else if (Platform.isIOS) {
-      // iOS simulator: 10.0.2.2 doesn't work, use localhost
       if (_rawBaseUrl.contains('10.0.2.2')) {
         return _rawBaseUrl.replaceFirst('10.0.2.2', 'localhost');
       }
@@ -34,14 +35,40 @@ class AppConfig {
     return '$b$p';
   }
 
-  /// 4) Endpoints (adjust paths if your backend differs)
-  static String get uploadEndpoint      => _u('/api/upload/image');
-  static String get textSearchEndpoint  => _u('/api/search/text');
-  static String get imageSearchEndpoint => _u('/api/search/image');
-  static String get healthEndpoint => '$baseUrl/healthz';
+  // ─── Endpoints ─────────────────────────────────────────────────────
 
-  /// Helper to fix image URLs for Android Emulator
-  /// In Mirrored Mode, SeaweedFS (port 8333) needs the actual WSL IP
+  /// Upload images
+  static String get uploadEndpoint          => _u('/api/upload/image');
+
+  /// Text search
+  static String get textSearchEndpoint      => _u('/api/search/text');
+
+  /// Image (reverse) search
+  static String get imageSearchEndpoint     => _u('/api/search/image');
+
+  /// Health check
+  static String get healthEndpoint          => _u('/healthz');
+
+  /// SSE status stream (real-time processing updates via Redis Pub/Sub)
+  static String get statusStreamEndpoint    => _u('/api/status-stream');
+
+  /// Granular delete (batch)
+  static String get deleteBatchEndpoint     => _u('/api/user/images/delete-batch');
+
+  /// Clear gallery (wipe all images, keep account)
+  static String get clearGalleryEndpoint    => _u('/api/user/images/clear');
+
+  /// Nuke account (irreversible)
+  static String get deleteAccountEndpoint   => _u('/api/user/account');
+
+  /// User images list
+  static String get userImagesListEndpoint  => _u('/api/user/images/list');
+
+  // ─── Image URL helpers ─────────────────────────────────────────────
+
+  /// Fix image URLs that may contain Docker-internal or localhost hostnames.
+  /// In production the backend returns URLs relative to the public IP, so
+  /// this is mainly a safety-net for legacy data.
   static String fixImageUrl(String url) {
     // Legacy: old photos stored with Docker-internal hostname
     if (url.contains('seaweedfs:8888')) {
@@ -54,6 +81,9 @@ class AppConfig {
     return url;
   }
 
-  /// 5) Temporary user id for MVP (replace with real auth later)
-  static const int userId = 404;
+  // ─── User ──────────────────────────────────────────────────────────
+
+  /// Temporary user id for MVP (replace with real auth later).
+  /// Changed to 1 to match the multi-tenant API examples.
+  static const int userId = 500;
 }

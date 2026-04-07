@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'ml_service'
+    metrics_path: '/metrics'
+    static_configs:
+      # In production, this will be your RunPod URL
+      - targets: ['host.docker.internal:8005']

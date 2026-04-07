@@ -1,0 +1,57 @@
+name: Deploy Go Backend
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-deploy.yml'
+  workflow_dispatch:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvips-dev
+          
+      - name: Run Go Tests
+        working-directory: ./backend
+        run: |
+          go test ./...
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Generate .env file for Target Host
+        run: |
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" > .env
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+          echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
+          echo "ML_SERVICE_URL=${{ secrets.ML_SERVICE_URL }}" >> .env
+          echo "AWS_S3_BUCKET=${{ secrets.S3_BUCKET_NAME }}" >> .env
+
+      - name: Build and Push Docker Image to ECR
+        if: success()
+        working-directory: ./backend
+        run: |
+          docker build -t ${{ secrets.ECR_BACKEND_REPO }}:latest .
+          docker push ${{ secrets.ECR_BACKEND_REPO }}:latest

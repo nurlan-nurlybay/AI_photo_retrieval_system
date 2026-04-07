@@ -5,17 +5,20 @@ import 'package:frontend_flutter/core/config.dart';
 import 'package:frontend_flutter/ui/widgets/cached_image.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:frontend_flutter/data/api_client.dart';
 
 class DetailScreen extends StatelessWidget {
   final String imageUrl;
   final MediaItem? mediaItem;
   final Function(File) onFindSimilar;
+  final VoidCallback? onDelete;
 
   const DetailScreen({
     super.key,
     required this.imageUrl,
     this.mediaItem,
     required this.onFindSimilar,
+    this.onDelete,
   });
 
   @override
@@ -27,8 +30,16 @@ class DetailScreen extends StatelessWidget {
         backgroundColor: Colors.transparent,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+        onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          if (mediaItem != null)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              onPressed: () => _confirmDelete(context),
+              tooltip: 'Delete Image',
+            ),
+        ],
       ),
       body: Stack(
         fit: StackFit.expand,
@@ -189,6 +200,52 @@ class DetailScreen extends StatelessWidget {
       scaffold.showSnackBar(
         SnackBar(content: Text('Error finding similar: $e')),
       );
+    }
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    if (mediaItem == null) return;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text('Delete Image?', style: TextStyle(color: Colors.white)),
+        content: const Text('This will permanently remove this image from the cloud gallery.',
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      try {
+        final api = ApiClient();
+        await api.deleteImagesBatch([mediaItem!.id]);
+        api.close();
+        
+        if (context.mounted) {
+          Navigator.pop(context); // Close detail screen
+          onDelete?.call(); // Notify home screen
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Image deleted')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Delete failed: $e'), backgroundColor: Colors.redAccent),
+          );
+        }
+      }
     }
   }
 }

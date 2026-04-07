@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
@@ -81,3 +82,34 @@ class ClearAllResponse(BaseModel):
     total_namespaces: int = 0
     errors: List[str] = Field(default_factory=list)
     error: Optional[str] = None
+=======
+from pydantic import BaseModel
+from typing import List, Optional
+
+class NamespaceRequest(BaseModel):
+    namespace: str
+
+class ImageVectorItem(BaseModel):
+    id: int
+    image_vector: List[float]
+
+class AddImageBatchRequest(NamespaceRequest):
+    items: List[ImageVectorItem]
+
+class TextVectorItem(BaseModel):
+    id: int
+    text_vector: List[float]
+    tags: List[str]
+
+class AddTextBatchRequest(NamespaceRequest):
+    items: List[TextVectorItem]
+
+class SearchRequest(NamespaceRequest):
+    query_text: Optional[str] = None
+    image_vector: Optional[List[float]] = None
+    text_vector: Optional[List[float]] = None
+    top_k: int = 10
+
+class DeleteItemsRequest(NamespaceRequest):
+    image_ids: List[int]
+>>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1

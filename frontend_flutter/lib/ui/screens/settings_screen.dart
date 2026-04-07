@@ -17,6 +17,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _galleryAccess = true;
   bool _pushNotifications = false;
   bool? _backendOnline;
+  final ApiClient _api = ApiClient();
 
   @override
   void initState() {
@@ -26,7 +27,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _checkBackend() async {
-    final online = await ApiClient().checkHealth();
+    final online = await _api.checkHealth();
     if (mounted) setState(() => _backendOnline = online);
   }
 
@@ -95,9 +96,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await initNotifications();
 
     // 2. Check backend
-    final api = ApiClient();
-    final online = await api.checkHealth();
-    api.close();
+    final online = await _api.checkHealth();
 
     if (!online) {
       if (mounted) {
@@ -185,6 +184,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: _testCategoryNotification,
           ),
           const Divider(color: Colors.white10),
+          _sectionHeader('Data Management'),
+          ListTile(
+            title: const Text('Clear Gallery', style: TextStyle(color: Colors.orangeAccent)),
+            subtitle: const Text('Remove all images from your cloud gallery',
+                style: TextStyle(color: Colors.white38, fontSize: 12)),
+            leading: const Icon(Icons.delete_sweep_outlined, color: Colors.orangeAccent),
+            onTap: () => _confirmAction(
+              title: 'Clear Gallery?',
+              message: 'This will remove all images from the cloud. Your local device photos will not be affected.',
+              actionLabel: 'Clear',
+              onConfirm: () => _api.clearGallery(),
+            ),
+          ),
+          ListTile(
+            title: const Text('Delete Account', style: TextStyle(color: Colors.redAccent)),
+            subtitle: const Text('Irreversibly destroy all your data and account',
+                style: TextStyle(color: Colors.white38, fontSize: 12)),
+            leading: const Icon(Icons.no_accounts_outlined, color: Colors.redAccent),
+            onTap: () => _confirmAction(
+              title: 'Nuke Account?',
+              message: 'This is irreversible. All your data will be permanently destroyed.',
+              actionLabel: 'Nuke it',
+              isDestructive: true,
+              onConfirm: () => _api.deleteAccount(),
+            ),
+          ),
+          const Divider(color: Colors.white10),
           _sectionHeader('About'),
           ListTile(
             title:
@@ -241,5 +267,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmAction({
+    required String title,
+    required String message,
+    required String actionLabel,
+    required Future<void> Function() onConfirm,
+    bool isDestructive = false,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: Text(title, style: const TextStyle(color: Colors.white)),
+        content: Text(message, style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              actionLabel,
+              style: TextStyle(color: isDestructive ? Colors.redAccent : Colors.orangeAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await onConfirm();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$actionLabel successful')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Action failed: $e'), backgroundColor: Colors.redAccent),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _api.close();
+    super.dispose();
   }
 }

@@ -1,0 +1,466 @@
+{
+  "models": {
+    "CLIP_ViT_L_14": {
+      "optimal_threshold": 0.2,
+      "max_f1": 0.5749486652741294,
+      "mrr": 0.8429453262786595
+    },
+    "CLIP_ViT_B_32_FT": {
+      "optimal_threshold": 0.24,
+      "max_f1": 0.2975679542118006,
+      "mrr": 0.6703547481325259
+    },
+    "ViT_L_16_SigLIP2_384": {
+      "optimal_threshold": 0.09,
+      "max_f1": 0.6208112874560561,
+      "mrr": 0.882716049382716
+    },
+    "Stack_SigLIP2_plus_Qwen": {
+      "optimal_threshold": 0.08,
+      "max_f1": 0.5924528301663226,
+      "mrr": 0.8930041152263374
+    }
+  },
+  "query_error_report": {
+    "CLIP_ViT_L_14": {
+      "a boy": {
+        "false_positives": 3,
+        "false_negatives": 3
+      },
+      "a girl": {
+        "false_positives": 2,
+        "false_negatives": 7
+      },
+      "birthday": {
+        "false_positives": 6,
+        "false_negatives": 6
+      },
+      "cake": {
+        "false_positives": 7,
+        "false_negatives": 3
+      },
+      "cat": {
+        "false_positives": 0,
+        "false_negatives": 3
+      },
+      "document": {
+        "false_positives": 0,
+        "false_negatives": 10
+      },
+      "dog": {
+        "false_positives": 3,
+        "false_negatives": 1
+      },
+      "elephant": {
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "family": {
+        "false_positives": 0,
+        "false_negatives": 10
+      },
+      "friends": {
+        "false_positives": 0,
+        "false_negatives": 10
+      },
+      "graduation": {
+        "false_positives": 0,
+        "false_negatives": 2
+      },
+      "group photo": {
+        "false_positives": 0,
+        "false_negatives": 5
+      },
+      "group photo at a dining table": {
+        "false_positives": 4,
+        "false_negatives": 4
+      },
+      "hiking": {
+        "false_positives": 3,
+        "false_negatives": 4
+      },
+      "kids": {
+        "false_positives": 4,
+        "false_negatives": 10
+      },
+      "nails": {
+        "false_positives": 2,
+        "false_negatives": 9
+      },
+      "night city": {
+        "false_positives": 1,
+        "false_negatives": 3
+      },
+      "park": {
+        "false_positives": 3,
+        "false_negatives": 10
+      },
+      "party": {
+        "false_positives": 3,
+        "false_negatives": 10
+      },
+      "picnic": {
+        "false_positives": 2,
+        "false_negatives": 6
+      },
+      "sea": {
+        "false_positives": 9,
+        "false_negatives": 3
+      },
+      "selfie": {
+        "false_positives": 1,
+        "false_negatives": 5
+      },
+      "skiing": {
+        "false_positives": 6,
+        "false_negatives": 1
+      },
+      "snake": {
+        "false_positives": 0,
+        "false_negatives": 2
+      },
+      "sunset": {
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "thailand": {
+        "false_positives": 9,
+        "false_negatives": 3
+      },
+      "wedding": {
+        "false_positives": 9,
+        "false_negatives": 0
+      }
+    },
+    "CLIP_ViT_B_32_FT": {
+      "a boy": {
+        "false_positives": 0,
+        "false_negatives": 10
+      },
+      "a girl": {
+        "false_positives": 1,
+        "false_negatives": 10
+      },
+      "birthday": {
+        "false_positives": 0,
+        "false_negatives": 8
+      },
+      "cake": {
+        "false_positives": 8,
+        "false_negatives": 6
+      },
+      "cat": {
+        "false_positives": 0,
+        "false_negatives": 6
+      },
+      "document": {
+        "false_positives": 0,
+        "false_negatives": 5
+      },
+      "dog": {
+        "false_positives": 1,
+        "false_negatives": 10
+      },
+      "elephant": {
+        "false_positives": 0,
+        "false_negatives": 3
+      },
+      "family": {
+        "false_positives": 2,
+        "false_negatives": 8
+      },
+      "friends": {
+        "false_positives": 0,
+        "false_negatives": 10
+      },
+      "graduation": {
+        "false_positives": 25,
+        "false_negatives": 0
+      },
+      "group photo": {
+        "false_positives": 0,
+        "false_negatives": 10
+      },
+      "group photo at a dining table": {
+        "false_positives": 3,
+        "false_negatives": 6
+      },
+      "hiking": {
+        "false_positives": 3,
+        "false_negatives": 7
+      },
+      "kids": {
+        "false_positives": 4,
+        "false_negatives": 8
+      },
+      "nails": {
+        "false_positives": 0,
+        "false_negatives": 10
+      },
+      "night city": {
+        "false_positives": 3,
+        "false_negatives": 2
+      },
+      "park": {
+        "false_positives": 34,
+        "false_negatives": 8
+      },
+      "party": {
+        "false_positives": 6,
+        "false_negatives": 10
+      },
+      "picnic": {
+        "false_positives": 68,
+        "false_negatives": 1
+      },
+      "sea": {
+        "false_positives": 36,
+        "false_negatives": 0
+      },
+      "selfie": {
+        "false_positives": 0,
+        "false_negatives": 10
+      },
+      "skiing": {
+        "false_positives": 36,
+        "false_negatives": 0
+      },
+      "snake": {
+        "false_positives": 0,
+        "false_negatives": 7
+      },
+      "sunset": {
+        "false_positives": 0,
+        "false_negatives": 4
+      },
+      "thailand": {
+        "false_positives": 11,
+        "false_negatives": 7
+      },
+      "wedding": {
+        "false_positives": 84,
+        "false_negatives": 0
+      }
+    },
+    "ViT_L_16_SigLIP2_384": {
+      "a boy": {
+        "false_positives": 12,
+        "false_negatives": 1
+      },
+      "a girl": {
+        "false_positives": 14,
+        "false_negatives": 3
+      },
+      "birthday": {
+        "false_positives": 5,
+        "false_negatives": 5
+      },
+      "cake": {
+        "false_positives": 7,
+        "false_negatives": 2
+      },
+      "cat": {
+        "false_positives": 1,
+        "false_negatives": 0
+      },
+      "document": {
+        "false_positives": 0,
+        "false_negatives": 6
+      },
+      "dog": {
+        "false_positives": 3,
+        "false_negatives": 0
+      },
+      "elephant": {
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "family": {
+        "false_positives": 2,
+        "false_negatives": 7
+      },
+      "friends": {
+        "false_positives": 14,
+        "false_negatives": 7
+      },
+      "graduation": {
+        "false_positives": 1,
+        "false_negatives": 1
+      },
+      "group photo": {
+        "false_positives": 3,
+        "false_negatives": 2
+      },
+      "group photo at a dining table": {
+        "false_positives": 1,
+        "false_negatives": 1
+      },
+      "hiking": {
+        "false_positives": 0,
+        "false_negatives": 7
+      },
+      "kids": {
+        "false_positives": 14,
+        "false_negatives": 6
+      },
+      "nails": {
+        "false_positives": 0,
+        "false_negatives": 5
+      },
+      "night city": {
+        "false_positives": 3,
+        "false_negatives": 2
+      },
+      "park": {
+        "false_positives": 7,
+        "false_negatives": 8
+      },
+      "party": {
+        "false_positives": 8,
+        "false_negatives": 7
+      },
+      "picnic": {
+        "false_positives": 4,
+        "false_negatives": 6
+      },
+      "sea": {
+        "false_positives": 11,
+        "false_negatives": 3
+      },
+      "selfie": {
+        "false_positives": 3,
+        "false_negatives": 3
+      },
+      "skiing": {
+        "false_positives": 4,
+        "false_negatives": 1
+      },
+      "snake": {
+        "false_positives": 0,
+        "false_negatives": 2
+      },
+      "sunset": {
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "thailand": {
+        "false_positives": 0,
+        "false_negatives": 3
+      },
+      "wedding": {
+        "false_positives": 4,
+        "false_negatives": 6
+      }
+    },
+    "Stack_SigLIP2_plus_Qwen": {
+      "a boy": {
+        "false_positives": 12,
+        "false_negatives": 1
+      },
+      "a girl": {
+        "false_positives": 21,
+        "false_negatives": 3
+      },
+      "birthday": {
+        "false_positives": 3,
+        "false_negatives": 5
+      },
+      "cake": {
+        "false_positives": 7,
+        "false_negatives": 3
+      },
+      "cat": {
+        "false_positives": 1,
+        "false_negatives": 0
+      },
+      "document": {
+        "false_positives": 0,
+        "false_negatives": 9
+      },
+      "dog": {
+        "false_positives": 3,
+        "false_negatives": 0
+      },
+      "elephant": {
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "family": {
+        "false_positives": 1,
+        "false_negatives": 8
+      },
+      "friends": {
+        "false_positives": 7,
+        "false_negatives": 10
+      },
+      "graduation": {
+        "false_positives": 0,
+        "false_negatives": 1
+      },
+      "group photo": {
+        "false_positives": 0,
+        "false_negatives": 3
+      },
+      "group photo at a dining table": {
+        "false_positives": 0,
+        "false_negatives": 7
+      },
+      "hiking": {
+        "false_positives": 0,
+        "false_negatives": 10
+      },
+      "kids": {
+        "false_positives": 12,
+        "false_negatives": 4
+      },
+      "nails": {
+        "false_positives": 0,
+        "false_negatives": 5
+      },
+      "night city": {
+        "false_positives": 1,
+        "false_negatives": 2
+      },
+      "park": {
+        "false_positives": 5,
+        "false_negatives": 8
+      },
+      "party": {
+        "false_positives": 6,
+        "false_negatives": 7
+      },
+      "picnic": {
+        "false_positives": 0,
+        "false_negatives": 8
+      },
+      "sea": {
+        "false_positives": 14,
+        "false_negatives": 2
+      },
+      "selfie": {
+        "false_positives": 1,
+        "false_negatives": 6
+      },
+      "skiing": {
+        "false_positives": 3,
+        "false_negatives": 3
+      },
+      "snake": {
+        "false_positives": 0,
+        "false_negatives": 3
+      },
+      "sunset": {
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "thailand": {
+        "false_positives": 0,
+        "false_negatives": 2
+      },
+      "wedding": {
+        "false_positives": 6,
+        "false_negatives": 3
+      }
+    }
+  }
+}

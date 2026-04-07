@@ -1,0 +1,28 @@
+{
+    "tests_by_mangled_function_name": {
+        "app.models.x_validate_namespace": [
+            "tests/test_vector_api.py::test_add_vector_success",
+            "tests/test_vector_api.py::test_add_vector_invalid_namespace",
+            "tests/test_vector_api.py::test_search_vector_success",
+            "tests/test_vector_api.py::test_delete_vector"
+        ],
+        "app.core.x__normalize": [
+            "tests/test_vector_api.py::test_vector_dimension_guardrail",
+            "tests/test_vector_api.py::test_l2_normalization_math"
+        ],
+        "app.core.x_add_vector": [
+            "tests/test_vector_api.py::test_vector_dimension_guardrail"
+        ]
+    },
+    "duration_by_test": {
+        "tests/test_vector_api.py::test_healthz": 0.004043935000026977,
+        "tests/test_vector_api.py::test_add_vector_missing_namespace": 0.002664293999941947,
+        "tests/test_vector_api.py::test_add_vector_invalid_namespace": 0.0018225009999923714,
+        "tests/test_vector_api.py::test_add_vector_success": 0.002642923000053088,
+        "tests/test_vector_api.py::test_search_vector_success": 0.002813894000041728,
+        "tests/test_vector_api.py::test_delete_vector": 0.002342537000060929,
+        "tests/test_vector_api.py::test_l2_normalization_math": 0.00042386499995927807,
+        "tests/test_vector_api.py::test_vector_dimension_guardrail": 0.0003098850000924358
+    },
+    "stats_time": 4.128345939
+}

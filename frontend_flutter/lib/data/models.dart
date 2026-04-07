@@ -1,5 +1,31 @@
 // lib/data/models.dart
 
+/// Processing status of an image in the ML pipeline.
+/// Maps to the SSE "status" field from the backend.
+enum ImageProcessingStatus {
+  /// Just uploaded — not yet searchable.
+  unprocessed,
+  /// SigLIP fast-encoded — basic similarity search works.
+  fastEncoded,
+  /// Qwen slow-encoded — deep contextual search works.
+  slowEncoded,
+  /// Fully indexed in Milvus.
+  inIndex,
+  /// ML worker failed on this image.
+  failed;
+
+  static ImageProcessingStatus fromString(String? s) {
+    switch (s) {
+      case 'fast_encoded': return ImageProcessingStatus.fastEncoded;
+      case 'slow_encoded': return ImageProcessingStatus.slowEncoded;
+      case 'in_index':     return ImageProcessingStatus.inIndex;
+      case 'failed':       return ImageProcessingStatus.failed;
+      case 'pending':
+      default:             return ImageProcessingStatus.unprocessed;
+    }
+  }
+}
+
 /// Single search hit when doing text/image search.
 class MediaResponse {
   final int id;
@@ -8,6 +34,7 @@ class MediaResponse {
   final String thumbUrl;
   final double? score;
   final String? localPath;
+  final ImageProcessingStatus status;
 
   MediaResponse({
     required this.id,
@@ -16,6 +43,7 @@ class MediaResponse {
     required this.thumbUrl,
     this.score,
     this.localPath,
+    this.status = ImageProcessingStatus.unprocessed,
   });
 
   factory MediaResponse.fromJson(Map<String, dynamic> json) {
@@ -26,6 +54,7 @@ class MediaResponse {
       thumbUrl: json['thumb_url'] as String,
       score: (json['score'] as num?)?.toDouble(),
       localPath: json['local_path'] as String?,
+      status: ImageProcessingStatus.fromString(json['status'] as String?),
     );
   }
 
@@ -36,6 +65,7 @@ class MediaResponse {
         'thumb_url': thumbUrl,
         'score': score,
         'local_path': localPath,
+        'status': status.name,
       };
 }
 
@@ -43,10 +73,14 @@ class MediaResponse {
 class SearchResponse {
   final List<MediaResponse> results;
   final int total;
+  /// Whether the Qwen (slow/deep) model was used for this search.
+  /// If false, UI can optionally show a "Fast Search Used" badge.
+  final bool usedQwen;
 
   SearchResponse({
     required this.results,
     required this.total,
+    this.usedQwen = false,
   });
 
   factory SearchResponse.fromJson(Map<String, dynamic> json) {
@@ -56,6 +90,7 @@ class SearchResponse {
     return SearchResponse(
       results: list,
       total: json['total'] as int? ?? list.length,
+      usedQwen: json['used_qwen'] as bool? ?? false,
     );
   }
 }
@@ -73,6 +108,7 @@ class MediaItem {
   final String? takenAt;
   final String createdAt;
   final String? localPath;
+  ImageProcessingStatus status;
 
   MediaItem({
     required this.id,
@@ -86,6 +122,7 @@ class MediaItem {
     required this.createdAt,
     this.takenAt,
     this.localPath,
+    this.status = ImageProcessingStatus.unprocessed,
   });
 
   factory MediaItem.fromJson(Map<String, dynamic> json) {
@@ -101,6 +138,7 @@ class MediaItem {
       takenAt: json['taken_at'] as String?,
       createdAt: json['created_at'] as String,
       localPath: json['local_path'] as String?,
+      status: ImageProcessingStatus.fromString(json['status'] as String?),
     );
   }
 
@@ -116,6 +154,7 @@ class MediaItem {
         'taken_at': takenAt,
         'created_at': createdAt,
         'local_path': localPath,
+        'status': status.name,
       };
 }
 

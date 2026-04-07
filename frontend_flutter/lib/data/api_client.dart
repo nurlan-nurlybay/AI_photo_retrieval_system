@@ -5,8 +5,6 @@ import 'package:http/http.dart' as http;
 
 import '../core/config.dart';
 import 'models.dart';
-import 'package:frontend_flutter/core/config.dart';
-import 'package:frontend_flutter/data/models.dart';
 
 /// Convenience extension to validate and decode JSON responses.
 extension _HttpResponseX on http.Response {
@@ -78,7 +76,7 @@ class ApiClient {
           },
           body: jsonEncode(body),
         )
-        .timeout(const Duration(seconds: 20));
+        .timeout(const Duration(seconds: 120));
     return SearchResponse.fromJson(resp.requireOkJson());
   }
 
@@ -87,25 +85,22 @@ class ApiClient {
   ///   - user_id : text
   ///   - file    : the probe image file  (NOTE: field name is "file")
   /// Returns SearchResponse.
-Future<SearchResponse> imageSearch(File probeImage) async {
-  final uri = Uri.parse(AppConfig.imageSearchEndpoint);
-  final req = http.MultipartRequest('POST', uri)
-    ..fields['user_id'] = AppConfig.userId.toString()
-    ..files.add(await http.MultipartFile.fromPath('file', probeImage.path))
-    ..headers['Accept'] = 'application/json';         // ok
-    // DO NOT set 'Content-Type' here.
+  Future<SearchResponse> imageSearch(File imageFile, {int limit = 10}) async {
+    print('[Search] POST ${AppConfig.imageSearchEndpoint} image=${imageFile.path} user=${AppConfig.userId}');
+    final request = http.MultipartRequest('POST', Uri.parse(AppConfig.imageSearchEndpoint));
+    request.fields['user_id'] = AppConfig.userId.toString();
+    request.fields['limit'] = limit.toString();
+    request.files.add(await http.MultipartFile.fromPath('file', imageFile.path));
 
-  // Debug logs:
-  print('-> POST $uri');
-  print('   fields: ${req.fields}');
-  print('   file exists: ${await probeImage.exists()} path: ${probeImage.path}');
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
 
-  final streamed = await req.send();
-  final resp = await http.Response.fromStream(streamed);
-  print('<- ${resp.statusCode} ${resp.headers['content-type']}');
-  print(resp.body);
-  return SearchResponse.fromJson(jsonDecode(resp.body));
-}
+    print('[Search] status=${response.statusCode} body=${response.body}');
+    if (response.statusCode == 200) {
+      return SearchResponse.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Image search failed: ${response.statusCode}');
+  }
 
 
   /// UPLOAD IMAGES
@@ -123,6 +118,7 @@ Future<SearchResponse> imageSearch(File probeImage) async {
     }
     final uri = Uri.parse(AppConfig.uploadEndpoint);
     final req = http.MultipartRequest('POST', uri)
+      ..fields['user_id'] = AppConfig.userId.toString()
       ..fields['dedup'] = dedup.toString()
       ..headers.addAll({'Accept': 'application/json', ...defaultHeaders});
 
@@ -178,5 +174,78 @@ Future<SearchResponse> imageSearch(File probeImage) async {
     final jsonData = jsonDecode(response.body);
     final listResponse = UserImagesListResponse.fromJson(jsonData);
     return listResponse.results;
+  }
+
+  // ====== DELETE IMAGES BATCH ======
+  /// DELETE /api/user/images/delete-batch
+  /// Removes specific images by their IDs.
+  Future<void> deleteImagesBatch(List<int> imageIds) async {
+    final uri = Uri.parse(AppConfig.deleteBatchEndpoint);
+    final resp = await _client
+        .delete(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            ...defaultHeaders,
+          },
+          body: jsonEncode({
+            'user_id': AppConfig.userId,
+            'image_ids': imageIds,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw HttpException('Delete batch failed: HTTP ${resp.statusCode}: ${resp.body}');
+    }
+  }
+
+  // ====== CLEAR GALLERY ======
+  /// DELETE /api/user/images/clear
+  /// Wipes all images for the user but keeps account active.
+  Future<void> clearGallery() async {
+    final uri = Uri.parse(AppConfig.clearGalleryEndpoint);
+    final resp = await _client
+        .delete(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            ...defaultHeaders,
+          },
+          body: jsonEncode({
+            'user_id': AppConfig.userId,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw HttpException('Clear gallery failed: HTTP ${resp.statusCode}: ${resp.body}');
+    }
+  }
+
+  // ====== DELETE ACCOUNT ======
+  /// DELETE /api/user/account
+  /// Irreversibly destroys all user data.
+  Future<void> deleteAccount() async {
+    final uri = Uri.parse(AppConfig.deleteAccountEndpoint);
+    final resp = await _client
+        .delete(
+          uri,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            ...defaultHeaders,
+          },
+          body: jsonEncode({
+            'user_id': AppConfig.userId,
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw HttpException('Delete account failed: HTTP ${resp.statusCode}: ${resp.body}');
+    }
   }
 }

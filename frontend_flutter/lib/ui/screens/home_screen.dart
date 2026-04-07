@@ -12,6 +12,7 @@ import 'package:frontend_flutter/core/photo_sync.dart';
 import 'package:frontend_flutter/data/models.dart';
 import 'package:frontend_flutter/ui/screens/detail_screen.dart';
 import 'package:frontend_flutter/ui/widgets/cached_image.dart';
+import 'package:frontend_flutter/core/status_stream_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -31,7 +32,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = false;
   bool _isSearchMode = false;
   bool _isBackendOnline = false;
+  bool _isWakingUp = false; // For cold start detection
   String? _error;
+
+  StreamSubscription<StatusUpdate>? _statusSub;
+  ImageProcessingStatus _globalStatus = ImageProcessingStatus.inIndex;
 
   /// Device gallery assets (shown in gallery mode).
   List<AssetEntity> _galleryAssets = [];
@@ -45,6 +50,40 @@ class _HomeScreenState extends State<HomeScreen> {
     _checkBackendStatus();
     _loadGalleryPhotos();
     _triggerAutoSync();
+    _initStatusStream();
+  }
+
+  void _initStatusStream() {
+    StatusStreamService.instance.start();
+    _statusSub = StatusStreamService.instance.stream.listen((update) {
+      if (!mounted) return;
+      setState(() {
+        // Update specific item in search results if it exists
+        final index = _searchResults.indexWhere((item) => item.id == update.mediaId);
+        if (index != -1) {
+          _searchResults[index].status = update.status;
+        }
+        _updateGlobalStatus();
+      });
+    });
+  }
+
+  void _updateGlobalStatus() {
+    if (_searchResults.isEmpty) {
+      _globalStatus = ImageProcessingStatus.inIndex;
+      return;
+    }
+    // Logic: lowest common denominator
+    // If ANY is unprocessed -> Grey
+    // Else if ANY is fastEncoded -> Yellow
+    // Else -> Green
+    if (_searchResults.any((item) => item.status == ImageProcessingStatus.unprocessed)) {
+      _globalStatus = ImageProcessingStatus.unprocessed;
+    } else if (_searchResults.any((item) => item.status == ImageProcessingStatus.fastEncoded)) {
+      _globalStatus = ImageProcessingStatus.fastEncoded;
+    } else {
+      _globalStatus = ImageProcessingStatus.inIndex;
+    }
   }
 
   Future<void> _triggerAutoSync() async {
@@ -53,9 +92,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkBackendStatus() async {
+    final start = DateTime.now();
     final isOnline = await _api.checkHealth();
+    final duration = DateTime.now().difference(start);
+
     if (mounted) {
-      setState(() => _isBackendOnline = isOnline);
+      setState(() {
+        _isBackendOnline = isOnline;
+        // If response took > 1.5s, it's likely a cold start / waking up
+        _isWakingUp = isOnline && duration.inMilliseconds > 1500;
+      });
     }
   }
 
@@ -63,6 +109,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _searchController.dispose();
     _debounce?.cancel();
+    _statusSub?.cancel();
+    StatusStreamService.instance.stop();
     _api.close();
     super.dispose();
   }
@@ -156,9 +204,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   checksum: '',
                   createdAt: 'Unknown',
                   localPath: r.localPath,
+                  status: r.status,
                 ))
             .toList();
         _isBackendOnline = true;
+        _updateGlobalStatus();
       });
     } catch (e) {
       setState(() => _error = e.toString());
@@ -212,9 +262,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   checksum: '',
                   createdAt: 'Unknown',
                   localPath: r.localPath,
+                  status: r.status,
                 ))
             .toList();
         _isBackendOnline = true;
+        _updateGlobalStatus();
       });
     } catch (e) {
       setState(() => _error = e.toString());
@@ -232,14 +284,21 @@ class _HomeScreenState extends State<HomeScreen> {
     results.sort((a, b) => (b.score ?? 0).compareTo(a.score ?? 0));
 
     // 1. Absolute floor — drop anything below minimum score
-    final aboveFloor =
-        results.where((r) => (r.score ?? 0) >= _minScore).toList();
+    // Updated: If score is null, we assume the backend already approved it as relevant.
+    final aboveFloor = results
+        .where((r) => r.score == null || r.score! >= _minScore)
+        .toList();
     if (aboveFloor.isEmpty) return [];
 
     // 2. Drop-based cutoff — stop when there's a big gap between consecutive scores
+    // Only apply cutoff if scores are actually being provided
     List<MediaResponse> kept = [aboveFloor[0]];
     for (int i = 1; i < aboveFloor.length; i++) {
-      final drop = (aboveFloor[i - 1].score ?? 0) - (aboveFloor[i].score ?? 0);
+      if (aboveFloor[i-1].score == null || aboveFloor[i].score == null) {
+        kept.add(aboveFloor[i]);
+        continue;
+      }
+      final drop = aboveFloor[i - 1].score! - aboveFloor[i].score!;
       if (drop > threshold) break;
       kept.add(aboveFloor[i]);
     }
@@ -319,45 +378,78 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStatusIndicator() {
+    Color statusColor;
+    String statusText;
+    String tooltip;
+
+    if (!_isBackendOnline) {
+      statusColor = Colors.red;
+      statusText = 'Offline';
+      tooltip = 'Backend is unreachable';
+    } else if (_isWakingUp) {
+      statusColor = Colors.orange;
+      statusText = 'Waking up...';
+      tooltip = 'ML services are performing a cold start (~2 mins)';
+    } else {
+      switch (_globalStatus) {
+        case ImageProcessingStatus.unprocessed:
+          statusColor = Colors.grey;
+          statusText = 'Indexing...';
+          tooltip = 'New images found. Search results may be incomplete.';
+          break;
+        case ImageProcessingStatus.fastEncoded:
+          statusColor = Colors.yellow;
+          statusText = 'Basic AI Search';
+          tooltip = 'Deep AI contextualization in progress...';
+          break;
+        case ImageProcessingStatus.slowEncoded:
+        case ImageProcessingStatus.inIndex:
+          statusColor = Colors.green;
+          statusText = 'Deep AI Search';
+          tooltip = 'Gallery fully synchronized. All models active.';
+          break;
+        case ImageProcessingStatus.failed:
+          statusColor = Colors.redAccent;
+          statusText = 'Processing Error';
+          tooltip = 'Some images failed to process.';
+          break;
+      }
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: _isBackendOnline
-                  ? Colors.green.withOpacity(0.1)
-                  : Colors.red.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: _isBackendOnline
-                    ? Colors.green.withOpacity(0.3)
-                    : Colors.red.withOpacity(0.3),
+          Tooltip(
+            message: tooltip,
+            preferBelow: false,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: statusColor.withOpacity(0.3)),
               ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: _isBackendOnline ? Colors.green : Colors.red,
-                    shape: BoxShape.circle,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
                   ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  _isBackendOnline ? 'Online' : 'Offline',
-                  style: TextStyle(
-                    color: _isBackendOnline ? Colors.green : Colors.red,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+                  const SizedBox(width: 6),
+                  Text(
+                    statusText,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -545,6 +637,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         imageUrl: item.url,
                         mediaItem: item,
                         onFindSimilar: (file) => _searchByImage(file),
+                        onDelete: () => _searchByText(_searchController.text),
                       ),
                     ),
                   );
@@ -553,6 +646,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   localPath: item.localPath,
                   remoteUrl:
                       item.thumbUrl.isNotEmpty ? item.thumbUrl : item.url,
+                  status: item.status,
                   fit: BoxFit.cover,
                   loadingBuilder: (context, child, progress) {
                     if (progress == null) return child;

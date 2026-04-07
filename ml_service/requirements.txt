@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 --extra-index-url https://download.pytorch.org/whl/cu121
 
 fastapi==0.115.0
@@ -13,3 +14,24 @@ torchvision==0.19.1
 # Hugging Face (CLIPModel/CLIPProcessor)
 transformers==4.44.0
 peft==0.11.1  # <--- for fine-tuning
+=======
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.11.0
+torchvision==0.26.0
+python-multipart==0.0.22
+transformers==5.5.0
+accelerate==1.13.0
+bitsandbytes==0.49.2
+qwen-vl-utils==0.0.14
+fastapi==0.135.3
+uvicorn[standard]==0.42.0
+pydantic==2.12.5
+pillow==12.2.0
+numpy==2.4.4
+structlog==25.5.0
+prometheus-fastapi-instrumentator==7.1.0
+pytest==9.0.2
+pillow-heif==1.3.0
+requests==2.31.0
+
+>>>>>>> aa3763fa7b72ca20a66743a7e808d3e539d2d5d1
