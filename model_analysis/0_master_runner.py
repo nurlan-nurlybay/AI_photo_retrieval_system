@@ -29,7 +29,7 @@ def main():
         print(f"\n{'='*50}\nStarting {script}...\n{'='*50}")
         process = subprocess.Popen([sys.executable, script], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         log_history = []
-        for line in process.stdout:
+        for line in process.stdout:  # type: ignore
             sys.stdout.write(line)
             log_history.append(line)
         process.wait()

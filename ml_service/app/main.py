@@ -1,5 +1,6 @@
 import time
-import requests
+import asyncio
+import httpx
 import structlog
 from contextlib import asynccontextmanager
 from typing import List
@@ -14,12 +15,10 @@ logger = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Warmup SigLIP so search/fast-path is ready immediately
     warmup()
     yield
 
 app = FastAPI(lifespan=lifespan)
-
 instrumentator = Instrumentator().instrument(app).expose(app)
 
 @app.middleware("http")
@@ -44,22 +43,33 @@ def slow_path(files: List[UploadFile] = File(...)):
     blobs = [f.file.read() for f in files]
     return {"results": encode_image_slow(blobs)}
 
+# --- CONCURRENT NETWORK FETCHING ---
+
+async def fetch_url(client: httpx.AsyncClient, url: str) -> bytes:
+    response = await client.get(url, timeout=10.0)
+    response.raise_for_status()
+    return response.content
+
 @app.post("/v1/encode/image/url/fast/", response_model=VectorResponse)
-def url_fast_path(req: ImageURLRequest):
-    blobs = []
-    for url in req.urls:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        blobs.append(response.content)
+async def url_fast_path(req: ImageURLRequest):
+    if not req.urls:
+        return {"vectors": []}
+        
+    async with httpx.AsyncClient() as client:
+        tasks = [fetch_url(client, url) for url in req.urls]
+        blobs = await asyncio.gather(*tasks)
+        
     return {"vectors": encode_image_fast(blobs)}
 
 @app.post("/v1/encode/image/url/slow/", response_model=SlowEncodeResponse)
-def url_slow_path(req: ImageURLRequest):
-    blobs = []
-    for url in req.urls:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        blobs.append(response.content)
+async def url_slow_path(req: ImageURLRequest):
+    if not req.urls:
+        return {"results": []}
+        
+    async with httpx.AsyncClient() as client:
+        tasks = [fetch_url(client, url) for url in req.urls]
+        blobs = await asyncio.gather(*tasks)
+        
     return {"results": encode_image_slow(blobs)}
 
 @app.get("/healthz")
