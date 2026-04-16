@@ -93,9 +93,13 @@ def encode_image_fast(images_bytes: List[bytes]) -> List[List[float]]:
     
     # 3. One forward pass for the entire array
     with torch.no_grad():
-        features = siglip_model.get_image_features(**inputs)
+        output = siglip_model.get_image_features(**inputs)
         
-    # 4. Matrix-wide L2 normalization
+    # 4. FIX: Extract the raw tensor from the HuggingFace wrapper
+    # If the output has a 'pooler_output', use that, otherwise use the output itself
+    features = output.pooler_output if hasattr(output, 'pooler_output') else output
+        
+    # 5. Matrix-wide L2 normalization
     features = features / features.norm(p=2, dim=-1, keepdim=True)
     
     return features.cpu().tolist()
