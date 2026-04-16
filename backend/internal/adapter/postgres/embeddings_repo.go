@@ -244,6 +244,30 @@ func (r *EmbeddingsRepo) ListUnembedded(ctx context.Context, limit int) ([]worke
 	return refs, rows.Err()
 }
 
+// ClaimForProcessing atomically inserts a placeholder row so that
+// ListUnembedded won't return this media on the next retry tick.
+// Returns true if the row was inserted or re-claimed from a failed state.
+// Returns false if another worker already owns it or it's already indexed.
+func (r *EmbeddingsRepo) ClaimForProcessing(ctx context.Context, userID, mediaID int64, model string) (bool, error) {
+	now := time.Now().UTC()
+	raw := `INSERT INTO embeddings (media_id, user_id, model, status, last_error, created_at, updated_at)
+			VALUES ($1, $2, $3, 'processing', '', $4, $5)
+			ON CONFLICT (media_id, model) DO UPDATE
+			SET status = 'processing', updated_at = EXCLUDED.updated_at
+			WHERE embeddings.status NOT IN ('processing', 'in_index')`
+
+	q := db.Query{
+		Name:     "Emb.ClaimForProcessing",
+		QueryRaw: raw,
+	}
+
+	tag, err := r.db.DB().ExecContext(ctx, q, mediaID, userID, model, now, now)
+	if err != nil {
+		return false, fmt.Errorf("claim for processing: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 func (r *EmbeddingsRepo) GetEmbeddingBytes(ctx context.Context, userID, mediaID int64) ([]byte, error) {
 	emb, err := r.GetEmbedding(ctx, userID, mediaID)
 	if err != nil {
