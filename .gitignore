@@ -218,3 +218,6 @@ photo-backend
 
 *.deb
 *.pem
+
+# Claude Code worktrees
+.claude/worktrees/

@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:frontend_flutter/data/models.dart';
 
 /// Central configuration for environment + endpoints.
 /// Edit here, not all over the codebase.
@@ -83,7 +82,7 @@ class AppConfig {
 
   // ─── User ──────────────────────────────────────────────────────────
 
-  /// Temporary user id for MVP (replace with real auth later).
-  /// Changed to 1 to match the multi-tenant API examples.
-  static const int userId = 500;
+  /// Device-unique user ID — initialized at app startup by [DeviceIdService].
+  /// Defaults to 500 so any code that runs before init still has a valid value.
+  static int userId = 500;
 }

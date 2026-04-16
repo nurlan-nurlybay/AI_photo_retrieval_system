@@ -35,16 +35,15 @@ class CachedImage extends StatelessWidget {
   }
 
   Widget _buildImage() {
-    // 1. Check if localPath exists and file is accessible
-    if (localPath != null) {
-      final file = File(localPath!);
-      if (file.existsSync()) {
-        return Image.file(
-          file,
-          fit: fit,
-          errorBuilder: (context, error, stackTrace) => _buildNetworkImage(),
-        );
-      }
+    // Always try local file first — never rely on private S3 URLs.
+    // Skip existsSync() (unreliable inside the iOS sandbox); instead let
+    // Image.file's errorBuilder fall back to network if the path is stale.
+    if (localPath != null && localPath!.isNotEmpty) {
+      return Image.file(
+        File(localPath!),
+        fit: fit,
+        errorBuilder: (context, error, stackTrace) => _buildNetworkImage(),
+      );
     }
     return _buildNetworkImage();
   }

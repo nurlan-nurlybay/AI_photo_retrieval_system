@@ -57,7 +57,7 @@ class PhotoSyncService {
   static const String _prefSyncedIds = 'photo_sync_synced_ids';
   static const String _prefLastRun = 'photo_sync_last_run_ms';
   static const String prefNeedsCategoryRefresh = 'needs_category_refresh';
-  static const int _batchSize = 5;
+  static const int _batchSize = 32;
 
   final ApiClient _api = ApiClient();
   bool _isSyncing = false;

@@ -39,16 +39,25 @@ class StatusStreamService {
   http.Client? _client;
   bool _isConnected = false;
   bool _shouldReconnect = true;
+  int _reconnectAttempts = 0;
+
+  static String _ts() => DateTime.now().toIso8601String().substring(11, 23);
 
   /// Start the SSE connection.
   void start() {
-    if (_isConnected) return;
+    if (_isConnected) {
+      print('[${_ts()}] 📡 [SSE] Already connected, skipping start()');
+      return;
+    }
+    print('[${_ts()}] 📡 [SSE] start() called');
     _shouldReconnect = true;
+    _reconnectAttempts = 0;
     _connect();
   }
 
   /// Stop the SSE connection.
   void stop() {
+    print('[${_ts()}] 📡 [SSE] stop() called');
     _shouldReconnect = false;
     _client?.close();
     _isConnected = false;
@@ -57,15 +66,24 @@ class StatusStreamService {
   Future<void> _connect() async {
     _isConnected = true;
     _client = http.Client();
+    final url = AppConfig.statusStreamEndpoint;
+
+    print('[${_ts()}] 📡 [SSE] Connecting to $url (attempt #${_reconnectAttempts + 1})');
 
     try {
-      final request = http.Request('GET', Uri.parse(AppConfig.statusStreamEndpoint));
-      // SSE usually requires keeping the connection open
+      final request = http.Request('GET', Uri.parse(url));
+      final sw = Stopwatch()..start();
       final response = await _client!.send(request).timeout(const Duration(minutes: 5));
+      sw.stop();
+
+      print('[${_ts()}] 📡 [SSE] Connected! status=${response.statusCode} (${sw.elapsedMilliseconds}ms)');
 
       if (response.statusCode != 200) {
+        print('[${_ts()}] 📡 [SSE] Bad status code: ${response.statusCode}');
         throw Exception('SSE status ${response.statusCode}');
       }
+
+      _reconnectAttempts = 0; // Reset on successful connect
 
       // Read the stream line by line
       response.stream
@@ -75,30 +93,34 @@ class StatusStreamService {
         (line) {
           if (line.startsWith('data: ')) {
             final data = line.substring(6).trim();
-            if (data.isEmpty || data == 'connected') return;
+            if (data.isEmpty || data == 'connected') {
+              print('[${_ts()}] 📡 [SSE] Handshake/heartbeat: "$data"');
+              return;
+            }
             try {
               final json = jsonDecode(data);
-              _controller.add(StatusUpdate.fromJson(json));
+              final update = StatusUpdate.fromJson(json);
+              print('[${_ts()}] 📡 [SSE] ✅ Event: mediaId=${update.mediaId} status=${update.status.name}');
+              _controller.add(update);
             } catch (e) {
-              // Silently ignore if it's just a non-JSON handshake or heartbeat
-              if (data != 'connected') {
-                print('[SSE] Error decoding data: $e (Raw: $data)');
-              }
+              print('[${_ts()}] 📡 [SSE] ⚠️ Decode error: $e (raw: "${data.length > 100 ? '${data.substring(0, 100)}...' : data}")');
             }
+          } else if (line.isNotEmpty) {
+            print('[${_ts()}] 📡 [SSE] Non-data line: "$line"');
           }
         },
         onError: (e) {
-          print('[SSE] Stream error: $e');
+          print('[${_ts()}] 📡 [SSE] ❌ Stream error: $e');
           _reconnect();
         },
         onDone: () {
-          print('[SSE] Stream closed');
+          print('[${_ts()}] 📡 [SSE] Stream closed (onDone)');
           _reconnect();
         },
         cancelOnError: true,
       );
     } catch (e) {
-      print('[SSE] Connection failed: $e');
+      print('[${_ts()}] 📡 [SSE] ❌ Connection failed: $e');
       _reconnect();
     }
   }
@@ -107,12 +129,17 @@ class StatusStreamService {
     _isConnected = false;
     _client?.close();
     if (_shouldReconnect) {
-      // Linear backoff for simplicity
-      Future.delayed(const Duration(seconds: 5), () {
+      _reconnectAttempts++;
+      // Exponential backoff: 5s, 10s, 20s, 40s... max 60s
+      final delay = Duration(seconds: (5 * (1 << (_reconnectAttempts - 1).clamp(0, 3))).clamp(5, 60));
+      print('[${_ts()}] 📡 [SSE] Reconnecting in ${delay.inSeconds}s (attempt #$_reconnectAttempts)');
+      Future.delayed(delay, () {
         if (_shouldReconnect && !_isConnected) {
           _connect();
         }
       });
+    } else {
+      print('[${_ts()}] 📡 [SSE] Reconnect disabled, staying disconnected');
     }
   }
 }

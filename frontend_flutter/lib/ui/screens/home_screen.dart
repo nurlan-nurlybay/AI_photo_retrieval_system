@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:photo_manager/photo_manager.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'package:frontend_flutter/data/api_client.dart';
 import 'package:frontend_flutter/core/config.dart';
 import 'package:frontend_flutter/core/photo_sync.dart';
@@ -41,6 +43,9 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Device gallery assets (shown in gallery mode).
   List<AssetEntity> _galleryAssets = [];
 
+  /// Set of local file paths that have been synced to the backend.
+  Set<String> _syncedIds = {};
+
   /// Backend search results (shown in search mode).
   List<MediaItem> _searchResults = [];
 
@@ -49,18 +54,27 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _checkBackendStatus();
     _loadGalleryPhotos();
+    _loadSyncedIds();
     _triggerAutoSync();
     _initStatusStream();
   }
 
+  Future<void> _loadSyncedIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ids = prefs.getStringList('photo_sync_synced_ids') ?? [];
+    if (mounted) setState(() => _syncedIds = ids.toSet());
+  }
+
   void _initStatusStream() {
+    print('[${_ts()}] 📡 [SSE] Starting StatusStreamService...');
     StatusStreamService.instance.start();
     _statusSub = StatusStreamService.instance.stream.listen((update) {
       if (!mounted) return;
+      print('[${_ts()}] 📡 [SSE] Received update: mediaId=${update.mediaId} status=${update.status.name}');
       setState(() {
-        // Update specific item in search results if it exists
         final index = _searchResults.indexWhere((item) => item.id == update.mediaId);
         if (index != -1) {
+          print('[${_ts()}] 📡 [SSE] Updated search result [$index] status -> ${update.status.name}');
           _searchResults[index].status = update.status;
         }
         _updateGlobalStatus();
@@ -68,27 +82,62 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  static String _ts() => DateTime.now().toIso8601String().substring(11, 23);
+
   void _updateGlobalStatus() {
     if (_searchResults.isEmpty) {
-      _globalStatus = ImageProcessingStatus.inIndex;
+      // No results on screen — don't touch the badge, let SSE drive it.
       return;
     }
-    // Logic: lowest common denominator
-    // If ANY is unprocessed -> Grey
-    // Else if ANY is fastEncoded -> Yellow
-    // Else -> Green
-    if (_searchResults.any((item) => item.status == ImageProcessingStatus.unprocessed)) {
-      _globalStatus = ImageProcessingStatus.unprocessed;
-    } else if (_searchResults.any((item) => item.status == ImageProcessingStatus.fastEncoded)) {
-      _globalStatus = ImageProcessingStatus.fastEncoded;
-    } else {
+    // Best-case logic: only upgrade the badge, never downgrade to grey.
+    // Search results default to status=unprocessed (backend omits the field),
+    // so checking "any unprocessed" would always be true → always grey. Wrong.
+    // We only promote to yellow/green once SSE has confirmed real processing.
+    if (_searchResults.any((item) =>
+        item.status == ImageProcessingStatus.inIndex ||
+        item.status == ImageProcessingStatus.slowEncoded)) {
       _globalStatus = ImageProcessingStatus.inIndex;
+    } else if (_searchResults.any((item) =>
+        item.status == ImageProcessingStatus.fastEncoded)) {
+      _globalStatus = ImageProcessingStatus.fastEncoded;
     }
+    // All still at default unprocessed → leave badge unchanged.
   }
 
   Future<void> _triggerAutoSync() async {
     final isOnline = await _api.checkHealth();
-    if (isOnline) PhotoSyncService.instance.startSync();
+    if (isOnline) {
+      // If the backend has no photos for this user but SharedPreferences
+      // thinks everything was already synced, we have stale sync state.
+      // Clear it so the next startSync() uploads everything fresh.
+      await _clearStaleSyncStateIfNeeded();
+      PhotoSyncService.instance.startSync();
+      // Reload synced IDs once sync completes so cloud badges update.
+      PhotoSyncService.instance.progressStream
+          .where((p) => p.status == PhotoSyncStatus.completed)
+          .first
+          .then((_) { if (mounted) _loadSyncedIds(); });
+    }
+  }
+
+  Future<void> _clearStaleSyncStateIfNeeded() async {
+    try {
+      final backendItems = await ApiClient.listUserImages(
+        userId: AppConfig.userId,
+        limit: 1,
+      );
+      if (backendItems.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final syncedIds = prefs.getStringList('photo_sync_synced_ids') ?? [];
+        if (syncedIds.isNotEmpty) {
+          print('[${_ts()}] 🔄 [SYNC] Backend empty but ${syncedIds.length} IDs cached — clearing stale sync state');
+          await prefs.remove('photo_sync_synced_ids');
+          if (mounted) setState(() => _syncedIds = {});
+        }
+      }
+    } catch (_) {
+      // Non-critical — ignore errors
+    }
   }
 
   Future<void> _checkBackendStatus() async {
@@ -167,12 +216,16 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Text search using /api/search/text
   Future<void> _searchByText(String query) async {
     final trimmed = query.trim();
+    print('[${_ts()}] 🔍 [TEXT_SEARCH_FLOW] query="$trimmed"');
+
     if (trimmed.isEmpty) {
+      print('[${_ts()}] 🔍 [TEXT_SEARCH_FLOW] Empty query -> loading gallery');
       _loadGalleryPhotos();
       return;
     }
 
     if (trimmed.length < 2) {
+      print('[${_ts()}] 🔍 [TEXT_SEARCH_FLOW] Query too short (<2 chars), clearing results');
       setState(() {
         _searchResults = [];
         _error = null;
@@ -188,8 +241,14 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
+      print('[${_ts()}] 🔍 [TEXT_SEARCH_FLOW] Calling _api.textSearch()...');
+      final sw = Stopwatch()..start();
       final SearchResponse resp = await _api.textSearch(trimmed, limit: 30);
+      sw.stop();
+      print('[${_ts()}] 🔍 [TEXT_SEARCH_FLOW] API returned ${resp.results.length} raw results in ${sw.elapsedMilliseconds}ms');
+
       final filtered = _filterResults(resp.results);
+      print('[${_ts()}] 🔍 [TEXT_SEARCH_FLOW] After filtering: ${filtered.length} results');
 
       setState(() {
         _searchResults = filtered
@@ -204,13 +263,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   checksum: '',
                   createdAt: 'Unknown',
                   localPath: r.localPath,
-                  status: r.status,
+                  // Vector DB only returns indexed items → at least fastEncoded.
+                  // Default to fastEncoded so dots are yellow from the start.
+                  status: r.status == ImageProcessingStatus.unprocessed
+                      ? ImageProcessingStatus.fastEncoded
+                      : r.status,
                 ))
             .toList();
         _isBackendOnline = true;
-        _updateGlobalStatus();
+        // Do NOT call _updateGlobalStatus() — defaults would flip badge to grey.
       });
-    } catch (e) {
+      print('[${_ts()}] 🔍 [TEXT_SEARCH_FLOW] ✅ UI updated with ${_searchResults.length} items');
+    } catch (e, st) {
+      print('[${_ts()}] 🔍 [TEXT_SEARCH_FLOW] ❌ ERROR: $e');
+      print('[${_ts()}] 🔍 [TEXT_SEARCH_FLOW] stacktrace: ${st.toString().split('\n').take(3).join(' | ')}');
       setState(() => _error = e.toString());
     } finally {
       setState(() => _isLoading = false);
@@ -219,16 +285,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Image search using /api/search/image
   Future<void> _searchByImage([File? preSelectedFile]) async {
+    print('[${_ts()}] 🖼️ [IMG_SEARCH_FLOW] Start. preSelected=${preSelectedFile != null}');
     File? file;
 
     if (preSelectedFile != null) {
       file = preSelectedFile;
+      print('[${_ts()}] 🖼️ [IMG_SEARCH_FLOW] Using preselected file: ${file.path}');
     } else {
+      print('[${_ts()}] 🖼️ [IMG_SEARCH_FLOW] Opening image picker...');
       final XFile? picked =
           await _picker.pickImage(source: ImageSource.gallery);
-      if (picked == null) return;
+      if (picked == null) {
+        print('[${_ts()}] 🖼️ [IMG_SEARCH_FLOW] User cancelled picker');
+        return;
+      }
       file = File(picked.path);
+      print('[${_ts()}] 🖼️ [IMG_SEARCH_FLOW] Picked: ${file.path}');
     }
+
+    final fileExists = await file.exists();
+    final fileSize = fileExists ? await file.length() : 0;
+    print('[${_ts()}] 🖼️ [IMG_SEARCH_FLOW] File exists=$fileExists, size=${(fileSize / 1024).toStringAsFixed(1)}KB');
 
     setState(() {
       _isLoading = true;
@@ -246,8 +323,14 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
+      print('[${_ts()}] 🖼️ [IMG_SEARCH_FLOW] Calling _api.imageSearch()...');
+      final sw = Stopwatch()..start();
       final SearchResponse resp = await _api.imageSearch(file);
+      sw.stop();
+      print('[${_ts()}] 🖼️ [IMG_SEARCH_FLOW] API returned ${resp.results.length} raw results in ${sw.elapsedMilliseconds}ms');
+
       final filtered = _filterResults(resp.results, threshold: 0.25);
+      print('[${_ts()}] 🖼️ [IMG_SEARCH_FLOW] After filtering: ${filtered.length} results');
 
       setState(() {
         _searchResults = filtered
@@ -262,14 +345,29 @@ class _HomeScreenState extends State<HomeScreen> {
                   checksum: '',
                   createdAt: 'Unknown',
                   localPath: r.localPath,
-                  status: r.status,
+                  status: r.status == ImageProcessingStatus.unprocessed
+                      ? ImageProcessingStatus.fastEncoded
+                      : r.status,
                 ))
             .toList();
         _isBackendOnline = true;
-        _updateGlobalStatus();
       });
-    } catch (e) {
-      setState(() => _error = e.toString());
+      print('[${_ts()}] 🖼️ [IMG_SEARCH_FLOW] ✅ UI updated with ${_searchResults.length} items');
+    } catch (e, st) {
+      print('[${_ts()}] 🖼️ [IMG_SEARCH_FLOW] ❌ ERROR: $e');
+      print('[${_ts()}] 🖼️ [IMG_SEARCH_FLOW] stacktrace: ${st.toString().split('\n').take(3).join(' | ')}');
+      // A 500 from the server usually means the user's photo index is empty —
+      // show an empty result grid instead of a red error screen.
+      final msg = e.toString();
+      if (msg.contains('500') || msg.contains('internal error')) {
+        print('[${_ts()}] 🖼️ [IMG_SEARCH_FLOW] Treating server 500 as empty results');
+        setState(() {
+          _searchResults = [];
+          _error = null;
+        });
+      } else {
+        setState(() => _error = msg);
+      }
     } finally {
       setState(() => _isLoading = false);
     }
@@ -280,28 +378,41 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<MediaResponse> _filterResults(List<MediaResponse> results,
       {double threshold = 0.12}) {
-    if (results.isEmpty) return [];
+    print('[${_ts()}] 🔬 [FILTER] Input: ${results.length} results, minScore=$_minScore, dropThreshold=$threshold');
+    if (results.isEmpty) {
+      print('[${_ts()}] 🔬 [FILTER] Empty input -> returning []');
+      return [];
+    }
+
+    // Log all raw scores
+    for (var i = 0; i < results.length; i++) {
+      print('[${_ts()}] 🔬 [FILTER] raw[$i] id=${results[i].id} score=${results[i].score}');
+    }
+
     results.sort((a, b) => (b.score ?? 0).compareTo(a.score ?? 0));
 
-    // 1. Absolute floor — drop anything below minimum score
-    // Updated: If score is null, we assume the backend already approved it as relevant.
+    // Null score means the backend returned 0.0 (omitted by Go omitempty) —
+    // images not yet in Milvus index. Pass them through so the user still
+    // sees their photos while embeddings are being generated.
     final aboveFloor = results
         .where((r) => r.score == null || r.score! >= _minScore)
         .toList();
+    print('[${_ts()}] 🔬 [FILTER] After floor filter: ${aboveFloor.length} (removed ${results.length - aboveFloor.length})');
     if (aboveFloor.isEmpty) return [];
 
-    // 2. Drop-based cutoff — stop when there's a big gap between consecutive scores
-    // Only apply cutoff if scores are actually being provided
     List<MediaResponse> kept = [aboveFloor[0]];
     for (int i = 1; i < aboveFloor.length; i++) {
-      if (aboveFloor[i-1].score == null || aboveFloor[i].score == null) {
-        kept.add(aboveFloor[i]);
-        continue;
+      // Treat null score as 0.0 for the gap-drop check.
+      final prevScore = aboveFloor[i - 1].score ?? 0.0;
+      final currScore = aboveFloor[i].score ?? 0.0;
+      final drop = prevScore - currScore;
+      if (drop > threshold) {
+        print('[${_ts()}] 🔬 [FILTER] Drop cutoff at [$i]: drop=$drop > threshold=$threshold');
+        break;
       }
-      final drop = aboveFloor[i - 1].score! - aboveFloor[i].score!;
-      if (drop > threshold) break;
       kept.add(aboveFloor[i]);
     }
+    print('[${_ts()}] 🔬 [FILTER] Final output: ${kept.length} results');
     return kept;
   }
 
@@ -487,7 +598,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         hintStyle: TextStyle(color: Colors.white38),
                         border: InputBorder.none,
                       ),
-                      onChanged: _onSearchChanged,
+                      onSubmitted: (_) => _searchByText(_searchController.text),
                     ),
                   ),
                   if (_isSearchMode)
@@ -588,6 +699,7 @@ class _HomeScreenState extends State<HomeScreen> {
           final asset = _galleryAssets[index];
           return _GalleryThumbnail(
             asset: asset,
+            isSynced: _syncedIds.contains(asset.id),
             onTap: () => _openAssetDetail(asset),
           );
         },
@@ -822,9 +934,14 @@ class _SyncBannerState extends State<_SyncBanner> {
 /// Thumbnail widget that loads from a device gallery [AssetEntity].
 class _GalleryThumbnail extends StatefulWidget {
   final AssetEntity asset;
+  final bool isSynced;
   final VoidCallback onTap;
 
-  const _GalleryThumbnail({required this.asset, required this.onTap});
+  const _GalleryThumbnail({
+    required this.asset,
+    required this.isSynced,
+    required this.onTap,
+  });
 
   @override
   State<_GalleryThumbnail> createState() => _GalleryThumbnailState();
@@ -852,9 +969,31 @@ class _GalleryThumbnailState extends State<_GalleryThumbnail> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: widget.onTap,
-      child: _thumbBytes != null
-          ? Image.memory(_thumbBytes!, fit: BoxFit.cover)
-          : Container(color: const Color(0xFF1E1E1E)),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _thumbBytes != null
+              ? Image.memory(_thumbBytes!, fit: BoxFit.cover)
+              : Container(color: const Color(0xFF1E1E1E)),
+          if (widget.isSynced)
+            Positioned(
+              bottom: 4,
+              right: 4,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.cloud_done,
+                  size: 12,
+                  color: Colors.greenAccent,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

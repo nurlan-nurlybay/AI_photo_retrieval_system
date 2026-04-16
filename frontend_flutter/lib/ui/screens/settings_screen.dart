@@ -187,14 +187,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _sectionHeader('Data Management'),
           ListTile(
             title: const Text('Clear Gallery', style: TextStyle(color: Colors.orangeAccent)),
-            subtitle: const Text('Remove all images from your cloud gallery',
+            subtitle: const Text('Remove all images from the cloud + reset local sync state',
                 style: TextStyle(color: Colors.white38, fontSize: 12)),
             leading: const Icon(Icons.delete_sweep_outlined, color: Colors.orangeAccent),
             onTap: () => _confirmAction(
               title: 'Clear Gallery?',
-              message: 'This will remove all images from the cloud. Your local device photos will not be affected.',
+              message: 'This removes all images from the cloud and resets the local sync state so your photos will be re-uploaded on the next sync.',
               actionLabel: 'Clear',
-              onConfirm: () => _api.clearGallery(),
+              onConfirm: () async {
+                await _api.clearGallery();
+                await _resetLocalSync();
+              },
+            ),
+          ),
+          ListTile(
+            title: const Text('Reset Local Sync', style: TextStyle(color: Colors.white70)),
+            subtitle: const Text('Force all local photos to re-upload on next launch',
+                style: TextStyle(color: Colors.white38, fontSize: 12)),
+            leading: const Icon(Icons.sync_problem_outlined, color: Colors.white54),
+            onTap: () => _confirmAction(
+              title: 'Reset Sync Data?',
+              message: 'Clears the local sync history. All photos will be re-uploaded on the next sync.',
+              actionLabel: 'Reset',
+              onConfirm: _resetLocalSync,
             ),
           ),
           ListTile(
@@ -207,7 +222,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               message: 'This is irreversible. All your data will be permanently destroyed.',
               actionLabel: 'Nuke it',
               isDestructive: true,
-              onConfirm: () => _api.deleteAccount(),
+              onConfirm: () async {
+                await _api.deleteAccount();
+                await _resetLocalSync();
+              },
             ),
           ),
           const Divider(color: Colors.white10),
@@ -267,6 +285,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  /// Clears local sync history so all photos will be re-uploaded on next sync.
+  /// Also wipes the category cache so it rebuilds from fresh data.
+  Future<void> _resetLocalSync() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('photo_sync_synced_ids');
+    await prefs.remove('categories_cache_json');
+    await prefs.remove('categories_cache_synced_count');
+    await prefs.setBool('needs_category_refresh', false);
   }
 
   Future<void> _confirmAction({

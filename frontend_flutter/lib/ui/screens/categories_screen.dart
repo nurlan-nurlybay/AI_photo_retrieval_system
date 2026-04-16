@@ -101,14 +101,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         });
       }
 
-      // Check if refresh is needed in the background
-      final needsRefresh = await CategoryCacheService.isRefreshNeeded();
-      if (needsRefresh) {
-        _backgroundRefresh();
-      }
+      // Intentionally skip background refresh on init — user can pull-to-refresh.
     } else {
-      // No cache — full refresh
-      await _fullRefresh();
+      // No cache — show empty state; user can pull-to-refresh manually.
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

@@ -49,9 +49,9 @@ class MediaResponse {
   factory MediaResponse.fromJson(Map<String, dynamic> json) {
     return MediaResponse(
       id: json['id'] as int,
-      userId: json['user_id'] as int,
-      url: json['url'] as String,
-      thumbUrl: json['thumb_url'] as String,
+      userId: json['user_id'] as int? ?? 0,
+      url: json['url'] as String? ?? '',
+      thumbUrl: json['thumb_url'] as String? ?? '',
       score: (json['score'] as num?)?.toDouble(),
       localPath: json['local_path'] as String?,
       status: ImageProcessingStatus.fromString(json['status'] as String?),
@@ -128,15 +128,15 @@ class MediaItem {
   factory MediaItem.fromJson(Map<String, dynamic> json) {
     return MediaItem(
       id: json['id'] as int,
-      url: json['url'] as String,
-      thumbUrl: json['thumb_url'] as String,
-      mimeType: json['mime_type'] as String,
-      sizeBytes: json['size_bytes'] as int,
-      width: json['width'] as int,
-      height: json['height'] as int,
-      checksum: json['checksum'] as String,
+      url: json['url'] as String? ?? '',
+      thumbUrl: json['thumb_url'] as String? ?? '',
+      mimeType: json['mime_type'] as String? ?? 'image/jpeg',
+      sizeBytes: json['size_bytes'] as int? ?? 0,
+      width: json['width'] as int? ?? 0,
+      height: json['height'] as int? ?? 0,
+      checksum: json['checksum'] as String? ?? '',
       takenAt: json['taken_at'] as String?,
-      createdAt: json['created_at'] as String,
+      createdAt: json['created_at'] as String? ?? '',
       localPath: json['local_path'] as String?,
       status: ImageProcessingStatus.fromString(json['status'] as String?),
     );
@@ -287,8 +287,8 @@ class AlbumPhoto {
 
   factory AlbumPhoto.fromJson(Map<String, dynamic> json) => AlbumPhoto(
         id: json['id'] as int,
-        url: json['url'] as String,
-        thumbUrl: json['thumb_url'] as String,
+        url: json['url'] as String? ?? '',
+        thumbUrl: json['thumb_url'] as String? ?? '',
         localPath: json['local_path'] as String?,
       );
 
