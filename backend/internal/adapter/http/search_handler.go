@@ -58,8 +58,6 @@ func (h *SearchHandler) SearchByText(c *gin.Context) {
 		resp.Results = append(resp.Results, httpdto.MediaResponse{
 			ID:        r.Media.ID,
 			UserID:    r.Media.UserID,
-			URL:       r.Media.URL,
-			ThumbURL:  r.Media.ThumbURL,
 			Score:     r.Score,
 			LocalPath: r.Media.LocalPath,
 		})
@@ -109,8 +107,6 @@ func (h *SearchHandler) SearchByImage(c *gin.Context) {
 		resp.Results = append(resp.Results, httpdto.MediaResponse{
 			ID:        r.Media.ID,
 			UserID:    r.Media.UserID,
-			URL:       r.Media.URL,
-			ThumbURL:  r.Media.ThumbURL,
 			Score:     r.Score,
 			LocalPath: r.Media.LocalPath,
 		})
