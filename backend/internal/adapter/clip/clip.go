@@ -163,6 +163,80 @@ func (c *Client) EmbedImageURL(ctx context.Context, imgUrl string) ([]float32, e
 	return respBody.Vectors[0], nil
 }
 
+// EmbedImageURLBatch sends up to ~50 URLs to the fast SigLIP endpoint in one
+// GPU call and returns a vector per URL in the same order.
+func (c *Client) EmbedImageURLBatch(ctx context.Context, urls []string) ([][]float32, error) {
+	endpoint := c.baseURL + "/v1/encode/image/url/fast/"
+
+	body, err := json.Marshal(map[string]interface{}{"urls": urls})
+	if err != nil {
+		return nil, fmt.Errorf("marshal failed: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("create req failed: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("post req failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("clip service returned %s: %s", resp.Status, string(bodyBytes))
+	}
+
+	var respBody clipdto.VectorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		return nil, fmt.Errorf("decode failed: %w", err)
+	}
+	if len(respBody.Vectors) != len(urls) {
+		return nil, fmt.Errorf("expected %d vectors, got %d", len(urls), len(respBody.Vectors))
+	}
+	return respBody.Vectors, nil
+}
+
+// EmbedImageURLSlowBatch sends up to ~50 URLs to the slow Qwen endpoint in one
+// GPU call and returns a SlowEncodeResult per URL in the same order.
+func (c *Client) EmbedImageURLSlowBatch(ctx context.Context, urls []string) ([]clipdto.SlowEncodeResult, error) {
+	endpoint := c.baseURL + "/v1/encode/image/url/slow/"
+
+	body, err := json.Marshal(map[string]interface{}{"urls": urls})
+	if err != nil {
+		return nil, fmt.Errorf("marshal failed: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("create req failed: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("post req failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("clip service returned %s: %s", resp.Status, string(bodyBytes))
+	}
+
+	var respBody clipdto.SlowEncodeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		return nil, fmt.Errorf("decode failed: %w", err)
+	}
+	if len(respBody.Results) != len(urls) {
+		return nil, fmt.Errorf("expected %d results, got %d", len(urls), len(respBody.Results))
+	}
+	return respBody.Results, nil
+}
+
 func (c *Client) EmbedImageURLSlow(ctx context.Context, imgUrl string) (*clipdto.SlowEncodeResult, error) {
 	endpoint := c.baseURL + "/v1/encode/image/url/slow/"
 

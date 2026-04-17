@@ -60,6 +60,22 @@ func (c *Client) Subscribe(ctx context.Context, channels ...string) *redis.PubSu
 // 	return res[0], []byte(res[1]), nil
 // }
 
+// TryDequeue is a non-blocking pop. It checks each key left-to-right and returns
+// the first item found. Returns ("", nil, nil) when all queues are empty.
+func (c *Client) TryDequeue(ctx context.Context, keys ...string) (string, []byte, error) {
+	for _, key := range keys {
+		val, err := c.rdb.RPop(ctx, key).Result()
+		if err == redis.Nil {
+			continue
+		}
+		if err != nil {
+			return "", nil, fmt.Errorf("redis RPop failed: %w", err)
+		}
+		return key, []byte(val), nil
+	}
+	return "", nil, nil
+}
+
 func (c *Client) DequeueBlock(ctx context.Context, timeoutSeconds int, keys ...string) (string, []byte, error) {
 	if len(keys) == 0 {
 		return "", nil, fmt.Errorf("no keys provided to DequeueBlock")

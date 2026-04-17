@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/vector"
@@ -14,8 +13,12 @@ import (
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/pkg/utils"
 )
 
+const defaultBatchSize = 50
+
 type Queue interface {
 	DequeueBlock(ctx context.Context, timeoutSeconds int, keys ...string) (queueKey string, payload []byte, err error)
+	// TryDequeue is a non-blocking pop; returns ("", nil, nil) when all queues empty.
+	TryDequeue(ctx context.Context, keys ...string) (queueKey string, payload []byte, err error)
 	Enqueue(ctx context.Context, key string, payload []byte) error
 	Publish(ctx context.Context, channel string, message interface{}) error
 }
@@ -23,8 +26,9 @@ type Queue interface {
 type Embedder interface {
 	EmbedImage(ctx context.Context, data []byte) ([]float32, error)
 	EmbedImageURL(ctx context.Context, url string) ([]float32, error)
+	EmbedImageURLBatch(ctx context.Context, urls []string) ([][]float32, error)
 	EmbedImageURLSlow(ctx context.Context, url string) (*clipdto.SlowEncodeResult, error)
-	// TODO: Add EmbedImageCaption/Qwen method once backend supports calling it
+	EmbedImageURLSlowBatch(ctx context.Context, urls []string) ([]clipdto.SlowEncodeResult, error)
 }
 
 type VectorClient interface {
@@ -66,7 +70,14 @@ type Enqueuer interface {
 	Enqueue(ctx context.Context, key string, payload []byte) error
 }
 
-// consume upload jobs, embed, store, index, set status
+// rawJob holds a dequeued job before it is processed.
+type rawJob struct {
+	key     string
+	payload []byte
+	job     ucdto.EmbedJob
+}
+
+// EmbedWorker consumes upload jobs, embeds, stores, indexes, and sets status.
 type EmbedWorker struct {
 	Q              Queue
 	EmbeddingsRepo EmbeddingsRepo
@@ -77,6 +88,7 @@ type EmbedWorker struct {
 	ModelID        string        // e.g. "open_clip:ViT-L/14@336px"
 	FastQueueKey   string
 	SlowQueueKey   string
+	BatchSize      int           // max jobs per GPU call; defaults to defaultBatchSize
 	IdleDelay      time.Duration // sleep after BRPOP timeouts/errors
 	Log            *logger.Logger
 }
@@ -84,6 +96,9 @@ type EmbedWorker struct {
 func (w *EmbedWorker) Run(ctx context.Context) error {
 	if w.IdleDelay <= 0 {
 		w.IdleDelay = 300 * time.Millisecond
+	}
+	if w.BatchSize <= 0 {
+		w.BatchSize = defaultBatchSize
 	}
 
 	var queues []string
@@ -94,10 +109,11 @@ func (w *EmbedWorker) Run(ctx context.Context) error {
 		queues = append(queues, w.FastQueueKey)
 	}
 	if len(queues) == 0 {
-		queues = []string{"jobs:slow_queue", "jobs:fast_queue"} // Fallback
+		queues = []string{"jobs:slow_queue", "jobs:fast_queue"}
 	}
 
-	w.Log.InfoContext(ctx, "worker started", "queues", queues)
+	w.Log.InfoContext(ctx, "worker started", "queues", queues, "batch_size", w.BatchSize)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -106,6 +122,7 @@ func (w *EmbedWorker) Run(ctx context.Context) error {
 		default:
 		}
 
+		// Block until at least one job is available.
 		key, payload, err := w.Q.DequeueBlock(ctx, 10, queues...)
 		if err != nil {
 			w.Log.ErrorContext(ctx, "dequeue failed", "error", err)
@@ -113,154 +130,280 @@ func (w *EmbedWorker) Run(ctx context.Context) error {
 			continue
 		}
 		if len(payload) == 0 {
-			w.Log.DebugContext(ctx, "no job received, sleeping")
 			time.Sleep(w.IdleDelay)
 			continue
 		}
 
-		w.Log.DebugContext(ctx, "job dequeued", "queue", key, "payload_size", len(payload))
-
-		var job ucdto.EmbedJob
-		if err := json.Unmarshal(payload, &job); err != nil {
+		var firstJob ucdto.EmbedJob
+		if err := json.Unmarshal(payload, &firstJob); err != nil {
 			w.Log.ErrorContext(ctx, "failed to unmarshal job (dropping)", "error", err)
 			continue
 		}
 
-		w.Log.DebugContext(ctx, "processing job", "user_id", job.UserID, "media_id", job.MediaID)
-		if err := w.processOne(ctx, job, key); err != nil {
-			w.Log.WarnContext(ctx, "job failed, re-enqueuing",
-				"user_id", job.UserID, "media_id", job.MediaID,
-				"queue", key, "error", err)
+		batch := []rawJob{{key: key, payload: payload, job: firstJob}}
 
-			// Re-enqueue the original payload back into the same queue.
-			// No retry limit — the worker will keep cycling until the
-			// ML service is ready (e.g. Qwen model download can take 30+ min).
-			if enqErr := w.Q.Enqueue(ctx, key, payload); enqErr != nil {
-				w.Log.ErrorContext(ctx, "CRITICAL: failed to re-enqueue job",
-					"media_id", job.MediaID, "queue", key, "error", enqErr)
+		// Drain more jobs non-blocking until we hit BatchSize.
+		for len(batch) < w.BatchSize {
+			k2, p2, err := w.Q.TryDequeue(ctx, queues...)
+			if err != nil || len(p2) == 0 {
+				break
 			}
+			var j ucdto.EmbedJob
+			if err := json.Unmarshal(p2, &j); err != nil {
+				w.Log.ErrorContext(ctx, "failed to unmarshal job (dropping)", "error", err)
+				continue
+			}
+			batch = append(batch, rawJob{key: k2, payload: p2, job: j})
+		}
 
-			// Brief backoff to avoid tight-looping on the same failing job
-			time.Sleep(5 * time.Second)
-		} else {
-			w.Log.DebugContext(ctx, "job completed successfully", "media_id", job.MediaID)
+		w.Log.DebugContext(ctx, "batch dequeued", "size", len(batch))
+
+		// Split by model so each sub-batch hits the right ML endpoint.
+		var fastBatch, slowBatch []rawJob
+		for _, rj := range batch {
+			if rj.key == w.FastQueueKey {
+				fastBatch = append(fastBatch, rj)
+			} else {
+				slowBatch = append(slowBatch, rj)
+			}
+		}
+
+		if len(fastBatch) > 0 {
+			w.processFastBatch(ctx, fastBatch)
+		}
+		if len(slowBatch) > 0 {
+			w.processSlowBatch(ctx, slowBatch)
 		}
 	}
 }
 
-func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob, sourceQueue string) error {
-	// Determine model before doing any work so we can claim the row early.
-	modelName := "siglip"
-	if sourceQueue != w.FastQueueKey {
-		modelName = "qwen"
-	}
+// processFastBatch claims, embeds with SigLIP, and ingests a batch of fast-queue jobs.
+func (w *EmbedWorker) processFastBatch(ctx context.Context, batch []rawJob) {
+	const modelName = "siglip"
 
-	// Atomically claim this media so the RetryWorker won't re-enqueue it
-	// while we're still processing. Skips if another worker already owns it
-	// or if it's already fully indexed.
-	claimed, err := w.EmbeddingsRepo.ClaimForProcessing(ctx, job.UserID, job.MediaID, modelName)
-	if err != nil {
-		return fmt.Errorf("claim for processing: %w", err)
+	// 1. Claim each job; collect the ones we own.
+	type claimedJob struct {
+		raw rawJob
+		url string
 	}
-	if !claimed {
-		w.Log.DebugContext(ctx, "skipping already-claimed media", "media_id", job.MediaID)
-		return nil
-	}
+	var claimed []claimedJob
 
-	w.Log.InfoContext(ctx, "fetching media bytes", "media_id", job.MediaID)
-
-	// Fetch media
-	media, err := w.MediaRepo.Get(ctx, job.UserID, job.MediaID)
-	if err != nil {
-		return fmt.Errorf("get media: %w", err)
-	}
-	if media == nil {
-		return fmt.Errorf("media not found: user=%d, media=%d", job.UserID, job.MediaID)
-	}
-
-	// Generate presigned URL for processing step
-	key, err := utils.ExtractS3Key(media.URL)
-	if err != nil {
-		return err
-	}
-	url, err := w.Storage.GeneratePresignedURL(ctx, key, 1*time.Hour)
-	if err != nil || url == "" {
-		w.Log.ErrorContext(ctx, "failed to generate presigned URL", "media_id", job.MediaID, "error", err)
-		_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
-		return err
-	}
-
-	var vec32 []float32
-	var newStatus string
-	var ingestItem vector.IngestItem
-
-	if sourceQueue == w.FastQueueKey {
-		vec, err := w.Clip.EmbedImageURL(ctx, url)
+	for _, rj := range batch {
+		ok, err := w.EmbeddingsRepo.ClaimForProcessing(ctx, rj.job.UserID, rj.job.MediaID, modelName)
 		if err != nil {
-			w.Log.ErrorContext(ctx, "embedding failed", "media_id", job.MediaID, "error", err)
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
-			return err
+			w.Log.ErrorContext(ctx, "claim failed, re-enqueuing", "media_id", rj.job.MediaID, "error", err)
+			_ = w.Q.Enqueue(ctx, rj.key, rj.payload)
+			continue
 		}
-		vec32 = vec
-
-		ingestItem = vector.IngestItem{
-			ImageID: job.MediaID,
-			Vector:  vec32,
+		if !ok {
+			w.Log.DebugContext(ctx, "skipping already-claimed media", "media_id", rj.job.MediaID)
+			continue
 		}
 
-		if err := w.Vector.IngestImageBatch(ctx, job.UserID, []vector.IngestItem{ingestItem}); err != nil {
-			w.Log.ErrorContext(ctx, "failed to ingest image batch", "media_id", job.MediaID, "error", err)
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
-			return err
+		media, err := w.MediaRepo.Get(ctx, rj.job.UserID, rj.job.MediaID)
+		if err != nil || media == nil {
+			w.Log.ErrorContext(ctx, "get media failed", "media_id", rj.job.MediaID, "error", err)
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, utils.TruncateErr(err))
+			continue
 		}
-		newStatus = "fast_encoded"
-	} else {
-		slowRes, err := w.Clip.EmbedImageURLSlow(ctx, url)
+
+		s3Key, err := utils.ExtractS3Key(media.URL)
 		if err != nil {
-			w.Log.ErrorContext(ctx, "slow embedding failed", "media_id", job.MediaID, "error", err)
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
-			return err
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, utils.TruncateErr(err))
+			continue
 		}
-		vec32 = slowRes.TextVector
-
-		ingestItem = vector.IngestItem{
-			ImageID: job.MediaID,
-			Vector:  vec32,
-			Tags:    slowRes.Tags,
+		url, err := w.Storage.GeneratePresignedURL(ctx, s3Key, 1*time.Hour)
+		if err != nil || url == "" {
+			w.Log.ErrorContext(ctx, "presign failed", "media_id", rj.job.MediaID, "error", err)
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, utils.TruncateErr(err))
+			continue
 		}
 
-		// Even if "qwen" logic is missing above, we simulate sending it as TextBatch to vector service.
-		if err := w.Vector.IngestTextBatch(ctx, job.UserID, []vector.IngestItem{ingestItem}); err != nil {
-			w.Log.ErrorContext(ctx, "failed to ingest text batch", "media_id", job.MediaID, "error", err)
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, utils.TruncateErr(err))
-			return err
-		}
-		newStatus = "slow_encoded"
+		claimed = append(claimed, claimedJob{raw: rj, url: url})
 	}
 
-	// Record to Postgres Media Repo
-	if err := w.MediaRepo.UpdateStatus(ctx, job.UserID, job.MediaID, newStatus); err != nil {
-		w.Log.ErrorContext(ctx, "failed to update media status", "error", err)
-		return err
+	if len(claimed) == 0 {
+		return
 	}
 
-	// Publish to Redis Pub/Sub for SSE event mapping
+	// 2. Single GPU call for all URLs.
+	urls := make([]string, len(claimed))
+	for i, cj := range claimed {
+		urls[i] = cj.url
+	}
+
+	vectors, err := w.Clip.EmbedImageURLBatch(ctx, urls)
+	if err != nil {
+		w.Log.ErrorContext(ctx, "fast batch embed failed, marking all failed", "error", err)
+		for _, cj := range claimed {
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, cj.raw.job.UserID, cj.raw.job.MediaID, utils.TruncateErr(err))
+			_ = w.Q.Enqueue(ctx, cj.raw.key, cj.raw.payload)
+		}
+		return
+	}
+
+	// 3. Build ingest items grouped by user for the vector service.
+	// Group by userID since IngestImageBatch is per-user.
+	type userGroup struct {
+		items []vector.IngestItem
+		jobs  []claimedJob
+	}
+	groups := map[int64]*userGroup{}
+	for i, cj := range claimed {
+		ug := groups[cj.raw.job.UserID]
+		if ug == nil {
+			ug = &userGroup{}
+			groups[cj.raw.job.UserID] = ug
+		}
+		ug.items = append(ug.items, vector.IngestItem{
+			ImageID: cj.raw.job.MediaID,
+			Vector:  vectors[i],
+		})
+		ug.jobs = append(ug.jobs, cj)
+	}
+
+	for userID, ug := range groups {
+		if err := w.Vector.IngestImageBatch(ctx, userID, ug.items); err != nil {
+			w.Log.ErrorContext(ctx, "vector ingest failed", "user_id", userID, "error", err)
+			for _, cj := range ug.jobs {
+				_ = w.EmbeddingsRepo.MarkFailed(ctx, cj.raw.job.UserID, cj.raw.job.MediaID, utils.TruncateErr(err))
+				_ = w.Q.Enqueue(ctx, cj.raw.key, cj.raw.payload)
+			}
+			continue
+		}
+
+		for i, cj := range ug.jobs {
+			w.finalise(ctx, cj.raw.job, ug.items[i].Vector, modelName, "fast_encoded")
+		}
+	}
+
+	w.Log.InfoContext(ctx, "fast batch complete", "count", len(claimed))
+}
+
+// processSlowBatch claims, embeds with Qwen, and ingests a batch of slow-queue jobs.
+func (w *EmbedWorker) processSlowBatch(ctx context.Context, batch []rawJob) {
+	const modelName = "qwen"
+
+	type claimedJob struct {
+		raw rawJob
+		url string
+	}
+	var claimed []claimedJob
+
+	for _, rj := range batch {
+		ok, err := w.EmbeddingsRepo.ClaimForProcessing(ctx, rj.job.UserID, rj.job.MediaID, modelName)
+		if err != nil {
+			w.Log.ErrorContext(ctx, "claim failed, re-enqueuing", "media_id", rj.job.MediaID, "error", err)
+			_ = w.Q.Enqueue(ctx, rj.key, rj.payload)
+			continue
+		}
+		if !ok {
+			w.Log.DebugContext(ctx, "skipping already-claimed media", "media_id", rj.job.MediaID)
+			continue
+		}
+
+		media, err := w.MediaRepo.Get(ctx, rj.job.UserID, rj.job.MediaID)
+		if err != nil || media == nil {
+			w.Log.ErrorContext(ctx, "get media failed", "media_id", rj.job.MediaID, "error", err)
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, utils.TruncateErr(err))
+			continue
+		}
+
+		s3Key, err := utils.ExtractS3Key(media.URL)
+		if err != nil {
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, utils.TruncateErr(err))
+			continue
+		}
+		url, err := w.Storage.GeneratePresignedURL(ctx, s3Key, 1*time.Hour)
+		if err != nil || url == "" {
+			w.Log.ErrorContext(ctx, "presign failed", "media_id", rj.job.MediaID, "error", err)
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, utils.TruncateErr(err))
+			continue
+		}
+
+		claimed = append(claimed, claimedJob{raw: rj, url: url})
+	}
+
+	if len(claimed) == 0 {
+		return
+	}
+
+	// 2. Single GPU call for all URLs.
+	urls := make([]string, len(claimed))
+	for i, cj := range claimed {
+		urls[i] = cj.url
+	}
+
+	results, err := w.Clip.EmbedImageURLSlowBatch(ctx, urls)
+	if err != nil {
+		w.Log.ErrorContext(ctx, "slow batch embed failed, marking all failed", "error", err)
+		for _, cj := range claimed {
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, cj.raw.job.UserID, cj.raw.job.MediaID, utils.TruncateErr(err))
+			_ = w.Q.Enqueue(ctx, cj.raw.key, cj.raw.payload)
+		}
+		return
+	}
+
+	// 3. Build ingest items grouped by user.
+	type userGroup struct {
+		items []vector.IngestItem
+		jobs  []claimedJob
+		vecs  [][]float32
+	}
+	groups := map[int64]*userGroup{}
+	for i, cj := range claimed {
+		ug := groups[cj.raw.job.UserID]
+		if ug == nil {
+			ug = &userGroup{}
+			groups[cj.raw.job.UserID] = ug
+		}
+		ug.items = append(ug.items, vector.IngestItem{
+			ImageID: cj.raw.job.MediaID,
+			Vector:  results[i].TextVector,
+			Tags:    results[i].Tags,
+		})
+		ug.jobs = append(ug.jobs, cj)
+		ug.vecs = append(ug.vecs, results[i].TextVector)
+	}
+
+	for userID, ug := range groups {
+		if err := w.Vector.IngestTextBatch(ctx, userID, ug.items); err != nil {
+			w.Log.ErrorContext(ctx, "vector text ingest failed", "user_id", userID, "error", err)
+			for _, cj := range ug.jobs {
+				_ = w.EmbeddingsRepo.MarkFailed(ctx, cj.raw.job.UserID, cj.raw.job.MediaID, utils.TruncateErr(err))
+				_ = w.Q.Enqueue(ctx, cj.raw.key, cj.raw.payload)
+			}
+			continue
+		}
+
+		for i, cj := range ug.jobs {
+			w.finalise(ctx, cj.raw.job, ug.vecs[i], modelName, "slow_encoded")
+		}
+	}
+
+	w.Log.InfoContext(ctx, "slow batch complete", "count", len(claimed))
+}
+
+// finalise records the embedding result to Postgres and fires an SSE event.
+func (w *EmbedWorker) finalise(ctx context.Context, job ucdto.EmbedJob, vec []float32, modelName, status string) {
+	if err := w.MediaRepo.UpdateStatus(ctx, job.UserID, job.MediaID, status); err != nil {
+		w.Log.ErrorContext(ctx, "failed to update media status", "media_id", job.MediaID, "error", err)
+	}
+
 	pubMsg := map[string]interface{}{
 		"media_id": job.MediaID,
 		"user_id":  job.UserID,
-		"status":   newStatus,
+		"status":   status,
 	}
 	pubBytes, _ := json.Marshal(pubMsg)
 	_ = w.Q.Publish(ctx, "status_updates", pubBytes)
 
-	// Keep legacy embeddings tracking functional for RetryWorker
-	bytesVec := utils.Float32ToBytes(vec32)
 	now := time.Now().UTC()
 	emb := &domain.Embedding{
 		MediaID:   job.MediaID,
 		UserID:    job.UserID,
 		Model:     modelName,
-		VecBytes:  bytesVec,
+		VecBytes:  utils.Float32ToBytes(vec),
 		Status:    "in_index",
 		LastError: "",
 		CreatedAt: now,
@@ -268,6 +411,5 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob, source
 	}
 	_ = w.EmbeddingsRepo.UpsertEmbedding(ctx, emb)
 
-	w.Log.InfoContext(ctx, "embedding successfully ingested via vector-service", "media_id", job.MediaID, "status", newStatus)
-	return nil
+	w.Log.InfoContext(ctx, "job finalised", "media_id", job.MediaID, "status", status)
 }
