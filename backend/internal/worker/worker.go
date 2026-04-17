@@ -48,6 +48,7 @@ type EmbeddingsRepo interface {
 	MarkPending(ctx context.Context, userID, mediaID int64) error
 	MarkInIndex(ctx context.Context, userID, mediaID int64) error
 	MarkFailed(ctx context.Context, userID, mediaID int64, msg string) error
+	ClaimForProcessing(ctx context.Context, userID, mediaID int64, model string) (bool, error)
 
 	// Retry helpers — return (media_id, user_id) pairs for correct namespace routing
 	ListUnindexed(ctx context.Context, userID int64, limit int) ([]MediaRef, error)
@@ -148,6 +149,24 @@ func (w *EmbedWorker) Run(ctx context.Context) error {
 }
 
 func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob, sourceQueue string) error {
+	// Determine model before doing any work so we can claim the row early.
+	modelName := "siglip"
+	if sourceQueue != w.FastQueueKey {
+		modelName = "qwen"
+	}
+
+	// Atomically claim this media so the RetryWorker won't re-enqueue it
+	// while we're still processing. Skips if another worker already owns it
+	// or if it's already fully indexed.
+	claimed, err := w.EmbeddingsRepo.ClaimForProcessing(ctx, job.UserID, job.MediaID, modelName)
+	if err != nil {
+		return fmt.Errorf("claim for processing: %w", err)
+	}
+	if !claimed {
+		w.Log.DebugContext(ctx, "skipping already-claimed media", "media_id", job.MediaID)
+		return nil
+	}
+
 	w.Log.InfoContext(ctx, "fetching media bytes", "media_id", job.MediaID)
 
 	// Fetch media
@@ -173,7 +192,6 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob, source
 
 	var vec32 []float32
 	var newStatus string
-	var modelName string
 	var ingestItem vector.IngestItem
 
 	if sourceQueue == w.FastQueueKey {
@@ -184,7 +202,6 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob, source
 			return err
 		}
 		vec32 = vec
-		modelName = "siglip"
 
 		ingestItem = vector.IngestItem{
 			ImageID: job.MediaID,
@@ -205,7 +222,6 @@ func (w *EmbedWorker) processOne(ctx context.Context, job ucdto.EmbedJob, source
 			return err
 		}
 		vec32 = slowRes.TextVector
-		modelName = "qwen"
 
 		ingestItem = vector.IngestItem{
 			ImageID: job.MediaID,

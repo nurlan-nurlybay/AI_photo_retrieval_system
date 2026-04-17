@@ -49,7 +49,7 @@ for img_path in all_files:
         inputs = processor(text=prompt_text, images=image, return_tensors="pt").to(model.device)
         
         with torch.inference_mode():
-            output = model.generate(**inputs, max_new_tokens=500, do_sample=False)
+            output = model.generate(**inputs, max_new_tokens=500, do_sample=False)  # type: ignore
             
         decoded = processor.decode(output[0][inputs["input_ids"].shape[-1]:], skip_special_tokens=True)
         
@@ -66,6 +66,6 @@ for img_path in all_files:
         del inputs, output, image; torch.cuda.empty_cache()
         
     except json.JSONDecodeError:
-        print(f"JSON Error on {file_key}. Model generated:\n{decoded}\n")
+        print(f"JSON Error on {file_key}. Model generated:\n{decoded}\n")  # type: ignore
     except Exception as e: 
         print(f"Error on {file_key}: {e}")

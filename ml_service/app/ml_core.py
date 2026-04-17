@@ -80,49 +80,89 @@ def encode_text(texts: List[str]) -> List[List[float]]:
     return _l2_norm(feat)
 
 def encode_image_fast(images_bytes: List[bytes]) -> List[List[float]]:
-    if siglip_model is None: warmup()
-    vectors = []
-    for blob in images_bytes:
-        image = Image.open(io.BytesIO(blob)).convert('RGB')
-        inputs = siglip_processor(images=image, return_tensors="pt").to(device)
-        with torch.no_grad():
-            feat = siglip_model.get_image_features(**inputs)
-        vectors.append(_l2_norm(feat)[0])
-    return vectors
+    if not images_bytes:
+        return []
+    if siglip_model is None: 
+        warmup()
+        
+    # 1. Decode all images from RAM
+    images = [Image.open(io.BytesIO(blob)).convert('RGB') for blob in images_bytes]
+    
+    # 2. Processor handles the stacking into a single batched tensor
+    inputs = siglip_processor(images=images, return_tensors="pt").to(device)
+    
+    # 3. One forward pass for the entire array
+    with torch.no_grad():
+        output = siglip_model.get_image_features(**inputs)
+        
+    # 4. FIX: Extract the raw tensor from the HuggingFace wrapper
+    # If the output has a 'pooler_output', use that, otherwise use the output itself
+    features = output.pooler_output if hasattr(output, 'pooler_output') else output
+        
+    # 5. Matrix-wide L2 normalization
+    features = features / features.norm(p=2, dim=-1, keepdim=True)
+    
+    return features.cpu().tolist()
 
 def encode_image_slow(images_bytes: List[bytes]) -> List[Dict[str, Any]]:
+    if not images_bytes:
+        return []
+
     _load_qwen()
     assert qwen_model is not None and qwen_processor is not None
     
-    results = []
+    # 1. Batch encode the images through SigLIP immediately
+    img_vecs = encode_image_fast(images_bytes)
+    
+    messages_batch = []
     for blob in images_bytes:
         image = Image.open(io.BytesIO(blob)).convert('RGB')
-        messages = [{"role": "user", "content": [
+        messages_batch.append([{"role": "user", "content": [
             {"type": "image", "image": image}, 
             {"type": "text", "text": 'Provide a description and 10 tags. Output ONLY a valid JSON object matching exactly this schema: {"description": "...", "tags": ["tag1", "tag2"]}.'}
-        ]}]
+        ]}])
         
-        prompt = qwen_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
-        image_inputs, *_ = process_vision_info(messages)
-        inputs = qwen_processor(text=[prompt], images=image_inputs, return_tensors="pt").to(device)
+    # 2. Apply chat template to the entire batch
+    texts = [qwen_processor.apply_chat_template(m, tokenize=False, add_generation_prompt=True, enable_thinking=False) for m in messages_batch]
+    
+    # 3. Process vision info for the entire batch
+    image_inputs, video_inputs = process_vision_info(messages_batch)  # type: ignore
+    
+    # CRITICAL: Left-padding is required for batched auto-regressive generation
+    qwen_processor.tokenizer.padding_side = 'left'
+    inputs = qwen_processor(text=texts, images=image_inputs, padding=True, return_tensors="pt").to(device)
+    
+    # 4. Generate descriptions for all images simultaneously
+    with torch.inference_mode():
+        output = qwen_model.generate(**inputs, max_new_tokens=600, do_sample=False)
         
-        with torch.inference_mode():
-            output = qwen_model.generate(**inputs, max_new_tokens=600, do_sample=False)
-            
-        generated_ids = output[0][inputs["input_ids"].shape[-1]:]
+    parsed_metadatas = []
+    descriptions = []
+    
+    # 5. Decode and parse the batch outputs
+    input_length = inputs["input_ids"].shape[-1]
+    for i in range(len(images_bytes)):
+        generated_ids = output[i][input_length:]
         decoded = qwen_processor.decode(generated_ids, skip_special_tokens=True)
         
         cleaned = re.sub(r'<think>.*?</think>', '', decoded, flags=re.DOTALL)
         match = re.search(r'\{.*\}', cleaned, re.DOTALL)
         metadata = json.loads(match.group(0)) if match else {"description": "error", "tags": []}
-
-        img_vec = encode_image_fast([blob])[0]
-        txt_vec = encode_text([metadata.get("description", "error")])[0]
         
+        parsed_metadatas.append(metadata)
+        descriptions.append(metadata.get("description", "error"))
+
+    # 6. Batch encode all the newly generated text descriptions through SigLIP
+    txt_vecs = encode_text(descriptions)
+    
+    # 7. Assemble the final results
+    results = []
+    for i in range(len(images_bytes)):
         results.append({
-            "description": metadata.get("description", ""),
-            "tags": metadata.get("tags", []),
-            "image_vector": img_vec,
-            "text_vector": txt_vec
+            "description": parsed_metadatas[i].get("description", ""),
+            "tags": parsed_metadatas[i].get("tags", []),
+            "image_vector": img_vecs[i],
+            "text_vector": txt_vecs[i]
         })
+        
     return results

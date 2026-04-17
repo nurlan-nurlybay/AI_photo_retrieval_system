@@ -69,13 +69,13 @@ with torch.no_grad():
             print(f"Vectorized {file}")
             count += 1
             if count % 50 == 0:
-                np.save(img_out, image_vectors)
-                np.save(txt_out, text_vectors)
+                np.save(img_out, image_vectors)  # type: ignore
+                np.save(txt_out, text_vectors)  # type: ignore
                 
         except Exception as e:
             print(f"Error vectorizing {file}: {e}")
 
-np.save(img_out, image_vectors)
-np.save(txt_out, text_vectors)
+np.save(img_out, image_vectors)  # type: ignore
+np.save(txt_out, text_vectors)  # type: ignore
 print("\n[SUCCESS] Vectorization complete.")
 

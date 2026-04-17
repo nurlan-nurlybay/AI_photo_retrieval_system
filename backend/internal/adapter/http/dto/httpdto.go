@@ -24,8 +24,6 @@ type SearchResponse struct {
 type MediaResponse struct {
 	ID        int64   `json:"id"`
 	UserID    int64   `json:"user_id"`
-	URL       string  `json:"url"`
-	ThumbURL  string  `json:"thumb_url"`
 	Score     float32 `json:"score,omitempty"`
 	LocalPath string  `json:"local_path,omitempty"`
 }
@@ -84,17 +82,15 @@ type UserImageDeleteResponse struct {
 // GENERIC RESPONSE
 type MediaItem struct {
 	ID        int64  `json:"id"`
-	URL       string `json:"url"`
-	ThumbURL  string `json:"thumb_url"`
 	MimeType  string `json:"mime_type"`
 	SizeBytes int64  `json:"size_bytes"`
 	Width     int    `json:"width"`
 	Height    int    `json:"height"`
 	Checksum  string `json:"checksum"`
-	TakenAt   string `json:"taken_at,omitempty"` // RFC3339, empty if unknown
-	CreatedAt string `json:"created_at"`         // RFC3339
+	TakenAt   string `json:"taken_at,omitempty"`
+	CreatedAt string `json:"created_at"`
 	LocalPath string `json:"local_path,omitempty"`
-	Status    string `json:"status"`             // "pending", "fast_encoded", "slow_encoded"
+	Status    string `json:"status"`
 }
 
 // ===== Deletion =====
