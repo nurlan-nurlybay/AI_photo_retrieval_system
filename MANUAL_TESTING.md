@@ -1,138 +1,109 @@
 # AI Photo Retrieval System - Manual Testing Log
-**Date:** April 7, 2026
-**Environment:** AWS EC2 (Backend Gateway) + Vast.ai (GPU Workers) + AWS S3 + AWS RDS/PostgreSQL + Milvus
+**Date:** April 18, 2026
+**Environment:** AWS EC2 (Backend Gateway) + Vast.ai (GPU Workers) + AWS S3 + Milvus + PostgreSQL + Redis
 
-This document serves as the official manual testing record for the Multi-Tenant Architecture and the surgical deletion cascade. All tests were executed sequentially to verify data isolation, state management, and cleanup accuracy.
+This document serves as the official manual testing record for the **Production-Grade Batch Upload Pipeline** and the **Semantic Vector Search** capabilities. All tests were executed to verify the integration between the Go backend and the remote GPU inference workers.
 
 ---
 
-## 🧪 Phase 1: Upload & Multi-Tenant Data Isolation
+## 🧪 Phase 1: Robust Batch Upload & Deduplication
 
-**Objective:** Prove that User 1 and User 2 have strictly separated namespaces. User A must not be able to search for or retrieve User B's images.
+**Objective:** Verify that the system can handle bulk uploads using the optimized bash-array method and correctly identify duplicate files based on content hashes.
 
-### 1. User 1 Upload (`backpack.jpg`)
-* **Action:** Uploaded `backpack.jpg` assigned to `user_id=1`.
-* **Result:** Image successfully uploaded to S3 under `/media/1/...`, database assigned `id: 5`, status marked `active`.
-* **Command:**
+### 1. The "Proper" Batch Upload
+* **Action:** Executed a bash script to collect 13 unique images and their corresponding local Android paths into a single multipart request.
+* **Result:** Successfully uploaded all 13 images. Database assigned IDs 1–13. Status correctly set to `active`.
+* **Bash Command:**
 ```bash
-curl -X POST http://13.61.195.243/api/upload/image \
-  -F "user_id=1" \
-  -F "files[]=@backpack.jpg" \
+# Prepare the multipart request array
+unset args
+args=(
+  -s -X POST http://13.61.195.243/api/upload/image
+  -H "Accept: application/json"
+  -F "user_id=42"
   -F "dedup=true"
+)
+
+# Append files and local paths
+for file in *.jpg; do
+  args+=("-F" "files[]=@$file")
+  args+=("-F" "local_paths[]=/storage/emulated/0/DCIM/$file")
+done
+
+# Execute
+curl "${args[@]}" | jq
 ```
 
-### 2. User 2 Upload (`glasses.jpg`)
-* **Action:** Uploaded `glasses.jpg` assigned to `user_id=2`.
-* **Result:** Image successfully uploaded to S3 under `/media/2/...`, database assigned `id: 6`, status marked `active`.
-* **Command:**
-```bash
-curl -X POST http://13.61.195.243/api/upload/image \
-  -F "user_id=2" \
-  -F "files[]=@glasses.jpg" \
-  -F "dedup=true"
-```
-
-### 3. Isolation Verification (User 2 searching for User 1's data)
-* **Action:** User 2 searches for "backpack" (User 1's image).
-* **Result:** 0 results returned (`total: 1` refers to total search matches within their namespace, which returned no images). **PASS**.
-* **Command:**
-```bash
-curl -X POST http://13.61.195.243/api/search/text \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": 2, "q": "backpack", "limit": 2}'
-```
-
-### 4. Search Verification (User 1 searching for own data)
-* **Action:** User 1 searches for "backpack".
-* **Result:** Successfully returned `id: 5` (backpack.jpg). **PASS**.
-* **Command:**
-```bash
-curl -X POST http://13.61.195.243/api/search/text \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": 1, "q": "backpack", "limit": 2}'
-```
+### 2. Content-Based Deduplication
+* **Action:** Re-ran the same upload script immediately.
+* **Result:** The API returned `"status": "duplicate"` for all 13 files. The system correctly cross-referenced the `user_id` and `checksum` to prevent redundant storage. **PASS**.
 
 ---
 
-## 🧪 Phase 2: Bulk Processing & Retrieval Accuracy
+## 🧪 Phase 2: Semantic Vector Search Verification
 
-**Objective:** Populate User 1's gallery and test the Vector Search ranking algorithm.
+**Objective:** Verify that the SigLIP model correctly maps text queries to images in vector space, specifically testing for synonyms and conceptual understanding rather than simple filename matching.
 
-### 1. Bulk Upload
-* **Action:** User 1 uploads a batch containing `hand.jpg` (`id: 7`) and `lipstick.jpg` (`id: 8`).
-* **Result:** Both images successfully saved, status active.
+### 1. Exact Match Search
+* **Action:** Search for "laptop" (filename was `laptop.jpg`).
+* **Result:** Returned the correct `local_path` with high similarity score.
 * **Command:**
 ```bash
-curl -X POST http://13.61.195.243/api/upload/image \
-  -F "user_id=1" \
-  -F "files[]=@hand.jpg" \
-  -F "files[]=@lipstick.jpg"
-```
-
-### 2. Ranking Verification
-* **Action:** User 1 searches for "hand" with a limit of 2.
-* **Result:** Successfully returned `id: 7` (`hand.jpg`) as the primary result. **PASS**.
-* **Command:**
-```bash
-curl -X POST http://13.61.195.243/api/search/text \
+curl -s -X POST http://13.61.195.243/api/search/text \
   -H "Content-Type: application/json" \
-  -d '{"user_id": 1, "q": "hand", "limit": 2}'
+  -d '{"user_id": 42, "q": "laptop", "limit": 1}' | jq -r '.results[0].local_path'
 ```
+
+### 2. Synonym & Conceptual Search (The "Synonym Test")
+* **Action:** Tested the engine with words not present in the filenames to verify semantic understanding.
+* **Test Matrix:**
+
+| Query | Target Image | Result |
+| :--- | :--- | :--- |
+| `arm` | `hand.jpg` | **SUCCESS** |
+| `spectacles` | `glasses.jpg` | **SUCCESS** |
+| `footwear` | `slippers.jpg` | **SUCCESS** |
+| `clutter` | `junk on the desk.jpg` | **SUCCESS** |
+| `power adapter` | `a charger.jpg` | **SUCCESS** |
 
 ---
 
-## 🧪 Phase 3: The Three-Tier Deletion Cascade
+## 🧪 Phase 3: Multi-Tier Deletion Logic
 
-**Objective:** Test the new deletion logic to ensure Postgres database rows, S3 files, and Milvus vector collections are accurately synchronized and removed.
+**Objective:** Verify the surgical removal of data across the three layers (Postgres, S3, and Milvus).
 
-### Tier 1: Granular Delete
-* **Action:** User 1 requests deletion of a specific image ID (`id: 7`, hand.jpg).
-* **Result:** API returned `{"ok":true,"message":"deleted 1 images for user 1"}`. **PASS**.
+### 1. Batch ID Deletion
+* **Action:** Delete a specific set of Image IDs.
 * **Command:**
 ```bash
 curl -X DELETE http://13.61.195.243/api/user/images/delete-batch \
   -H "Content-Type: application/json" \
   -d '{
-    "user_id": 1,
-    "image_ids": [7]
+    "user_id": 42,
+    "image_ids": [1, 2, 3]
   }'
 ```
 
-### Tier 2: Clear Gallery
-* **Action:** Requesting the Backend API to wipe all images for User 2 while retaining the namespace structure.
-* **Result:** Success (Verified via blank terminal return, no errors thrown by Go router). **PASS**.
+### 2. Gallery Purge (Clear All)
+* **Action:** Wipe the entire gallery for a user without deleting the user account.
 * **Command:**
 ```bash
 curl -X DELETE http://13.61.195.243/api/user/images/clear \
   -H "Content-Type: application/json" \
-  -d '{"user_id": 2}'
-```
-
-### Tier 3: Complete Account Nuke
-* **Action:** Destroying User 1's entire footprint across the system.
-* **Result:** API returned `{"ok":true,"message":"account and all data nuked for user 1"}`. **PASS**.
-* **Command:**
-```bash
-curl -X DELETE http://13.61.195.243/api/user/account \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": 1}'
+  -d '{"user_id": 42}'
 ```
 
 ---
 
-## 🏆 Final Verification
+## 🛠️ Infrastructure & Debugging Notes
 
-**Action:** Executed a direct Postgres query on the AWS EC2 instance to verify that the "Nuke" command successfully cascaded through the database layer for User 1.
+1.  **GPU Scheduling:** Remote GPU workers on Vast.ai are "interruptible." If a `connection refused` error occurs, the worker instance must be destroyed and a new one rented, with the `ML_SERVICE_URL` updated in the `.env` file.
+2.  **Schema Enforcement:** Manual schema application via `apply_migrations.sql` is required if the backend container lacks the `goose` migration tool. 
+    * **Fix Applied:** `vec_bytes` set to `Nullable` to allow `ClaimForProcessing` inserts.
+    * **Fix Applied:** `status` CHECK constraint updated to include `fast_encoded` and `slow_encoded`.
+3.  **API Schema:** The text search endpoint requires the key **`"q"`** for the search string. The response returns results in the format `.results[].local_path`.
 
-```bash
-ubuntu@ip-10-0-7-15:~$ docker exec -i pg psql -U postgres -d media -c "SELECT count(*) FROM media WHERE user_id = 1;"
-```
+---
 
-**Result:**
-```text
- count 
--------
-     0
-(1 row)
-```
-**Conclusion:** Zero orphaned rows. The S3-Postgres-Milvus deletion cascade is functioning perfectly. System is production-ready.
+## 🏆 Final Status: **VERIFIED**
+The system successfully processes bulk uploads, handles asynchronous inference on remote hardware, and retrieves images based on complex semantic concepts. The pipeline is stable.
