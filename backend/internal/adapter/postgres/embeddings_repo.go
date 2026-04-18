@@ -70,14 +70,17 @@ func (r *EmbeddingsRepo) UpsertEmbedding(ctx context.Context, emb *domain.Embedd
 	return nil
 }
 
-func (r *EmbeddingsRepo) GetEmbedding(ctx context.Context, userID, mediaID int64) (*domain.Embedding, error) {
+// GetEmbedding fetches the row for (userID, mediaID, model). With the
+// composite PK (media_id, model) the same media may have multiple embedding
+// rows (e.g. "siglip" + "qwen"), so the model must be specified.
+func (r *EmbeddingsRepo) GetEmbedding(ctx context.Context, userID, mediaID int64, model string) (*domain.Embedding, error) {
 	query, args, err := squirrel.
 		Select(
 			EmbMediaIDCol, EmbUserIDCol, EmbModelCol, EmbVecBytesCol,
 			EmbStatusCol, EmbLastErrCol, EmbCreatedCol, EmbUpdatedCol,
 		).
 		From(EmbTableName).
-		Where(squirrel.Eq{EmbMediaIDCol: mediaID, EmbUserIDCol: userID}).
+		Where(squirrel.Eq{EmbMediaIDCol: mediaID, EmbUserIDCol: userID, EmbModelCol: model}).
 		Limit(1).
 		PlaceholderFormat(squirrel.Dollar).
 		ToSql()
@@ -131,25 +134,29 @@ func (r *EmbeddingsRepo) DeleteEmbedding(ctx context.Context, userID, mediaID in
 	return nil
 }
 
-func (r *EmbeddingsRepo) MarkPending(ctx context.Context, userID, mediaID int64) error {
-	return r.updateStatus(ctx, userID, mediaID, "pending", "")
+func (r *EmbeddingsRepo) MarkPending(ctx context.Context, userID, mediaID int64, model string) error {
+	return r.updateStatus(ctx, userID, mediaID, model, "pending", "")
 }
 
-func (r *EmbeddingsRepo) MarkInIndex(ctx context.Context, userID, mediaID int64) error {
-	return r.updateStatus(ctx, userID, mediaID, "in_index", "")
+func (r *EmbeddingsRepo) MarkInIndex(ctx context.Context, userID, mediaID int64, model string) error {
+	return r.updateStatus(ctx, userID, mediaID, model, "in_index", "")
 }
 
-func (r *EmbeddingsRepo) MarkFailed(ctx context.Context, userID, mediaID int64, msg string) error {
-	return r.updateStatus(ctx, userID, mediaID, "failed", msg)
+func (r *EmbeddingsRepo) MarkFailed(ctx context.Context, userID, mediaID int64, model, msg string) error {
+	return r.updateStatus(ctx, userID, mediaID, model, "failed", msg)
 }
 
-func (r *EmbeddingsRepo) updateStatus(ctx context.Context, userID, mediaID int64, status, msg string) error {
+// updateStatus mutates exactly one row — the (media_id, user_id, model)
+// triple that matches the composite PK. Without the model clause this would
+// clobber every model's row for a given media (e.g. failing the qwen run
+// would also mark siglip's 'in_index' row as 'failed').
+func (r *EmbeddingsRepo) updateStatus(ctx context.Context, userID, mediaID int64, model, status, msg string) error {
 	query, args, err := squirrel.
 		Update(EmbTableName).
 		Set(EmbStatusCol, status).
 		Set(EmbLastErrCol, msg).
 		Set(EmbUpdatedCol, time.Now().UTC()).
-		Where(squirrel.Eq{EmbMediaIDCol: mediaID, EmbUserIDCol: userID}).
+		Where(squirrel.Eq{EmbMediaIDCol: mediaID, EmbUserIDCol: userID, EmbModelCol: model}).
 		PlaceholderFormat(squirrel.Dollar).
 		ToSql()
 	if err != nil {
@@ -168,20 +175,35 @@ func (r *EmbeddingsRepo) updateStatus(ctx context.Context, userID, mediaID int64
 	return nil
 }
 
-// rows where status IN ('pending','failed')
-// userID=0 to set global search
+// staleProcessingInterval defines how long a 'processing' row can sit before
+// the retry sweep treats it as abandoned (worker crashed mid-batch). Kept
+// well above any realistic single-batch embed latency so legitimate in-flight
+// rows are never stolen.
+const staleProcessingInterval = "5 minutes"
+
+// ListUnindexed returns rows that need replay into the vector service:
+//   - status IN ('pending','failed') — normal retry targets
+//   - status = 'processing' AND updated_at older than staleProcessingInterval
+//     — orphaned by a crashed worker
+//
+// userID=0 yields a global sweep across all users.
 func (r *EmbeddingsRepo) ListUnindexed(ctx context.Context, userID int64, limit int) ([]worker.MediaRef, error) {
+	statusClause := squirrel.Or{
+		squirrel.Eq{EmbStatusCol: []string{"pending", "failed"}},
+		squirrel.And{
+			squirrel.Eq{EmbStatusCol: "processing"},
+			squirrel.Expr(fmt.Sprintf("%s < NOW() - INTERVAL '%s'", EmbUpdatedCol, staleProcessingInterval)),
+		},
+	}
+
 	qb := squirrel.
-		Select(EmbMediaIDCol, EmbUserIDCol).
+		Select(EmbMediaIDCol, EmbUserIDCol, EmbModelCol).
 		From(EmbTableName).
-		Where(squirrel.Eq{
-			EmbStatusCol: []string{"pending", "failed"},
-		}).
+		Where(statusClause).
 		OrderBy(fmt.Sprintf("%s DESC", EmbUpdatedCol)).
 		Limit(uint64(limit)).
 		PlaceholderFormat(squirrel.Dollar)
 
-	// Only add user filter if userID > 0
 	if userID > 0 {
 		qb = qb.Where(squirrel.Eq{EmbUserIDCol: userID})
 	}
@@ -205,7 +227,7 @@ func (r *EmbeddingsRepo) ListUnindexed(ctx context.Context, userID int64, limit 
 	var refs []worker.MediaRef
 	for rows.Next() {
 		var ref worker.MediaRef
-		if err := rows.Scan(&ref.MediaID, &ref.UserID); err != nil {
+		if err := rows.Scan(&ref.MediaID, &ref.UserID, &ref.Model); err != nil {
 			return nil, fmt.Errorf("scan unindexed ref: %w", err)
 		}
 		refs = append(refs, ref)
@@ -244,17 +266,28 @@ func (r *EmbeddingsRepo) ListUnembedded(ctx context.Context, limit int) ([]worke
 	return refs, rows.Err()
 }
 
-// ClaimForProcessing atomically inserts a placeholder row so that
-// ListUnembedded won't return this media on the next retry tick.
-// Returns true if the row was inserted or re-claimed from a failed state.
-// Returns false if another worker already owns it or it's already indexed.
+// ClaimForProcessing atomically claims the (media_id, model) row. Returns
+// true when this worker now owns the row, false when another worker owns it
+// or it's already indexed.
+//
+// Reclaimable states:
+//   - row does not exist yet                      → INSERT
+//   - status IN ('pending','failed')              → UPDATE to 'processing'
+//   - status = 'processing' AND updated_at is older
+//     than staleProcessingInterval (crashed worker) → UPDATE to 'processing'
+//
+// Blocked states:
+//   - status = 'in_index'                                         → noop
+//   - status = 'processing' with a recent updated_at (live owner) → noop
 func (r *EmbeddingsRepo) ClaimForProcessing(ctx context.Context, userID, mediaID int64, model string) (bool, error) {
 	now := time.Now().UTC()
-	raw := `INSERT INTO embeddings (media_id, user_id, model, status, last_error, created_at, updated_at)
+	raw := fmt.Sprintf(`INSERT INTO embeddings (media_id, user_id, model, status, last_error, created_at, updated_at)
 			VALUES ($1, $2, $3, 'processing', '', $4, $5)
 			ON CONFLICT (media_id, model) DO UPDATE
 			SET status = 'processing', updated_at = EXCLUDED.updated_at
-			WHERE embeddings.status NOT IN ('processing', 'in_index')`
+			WHERE embeddings.status IN ('pending', 'failed')
+			   OR (embeddings.status = 'processing' AND embeddings.updated_at < NOW() - INTERVAL '%s')`,
+		staleProcessingInterval)
 
 	q := db.Query{
 		Name:     "Emb.ClaimForProcessing",
@@ -268,13 +301,13 @@ func (r *EmbeddingsRepo) ClaimForProcessing(ctx context.Context, userID, mediaID
 	return tag.RowsAffected() > 0, nil
 }
 
-func (r *EmbeddingsRepo) GetEmbeddingBytes(ctx context.Context, userID, mediaID int64) ([]byte, error) {
-	emb, err := r.GetEmbedding(ctx, userID, mediaID)
+func (r *EmbeddingsRepo) GetEmbeddingBytes(ctx context.Context, userID, mediaID int64, model string) ([]byte, error) {
+	emb, err := r.GetEmbedding(ctx, userID, mediaID, model)
 	if err != nil {
 		return nil, err
 	}
 	if emb == nil {
-		return nil, fmt.Errorf("embedding not found for user=%d media=%d", userID, mediaID)
+		return nil, fmt.Errorf("embedding not found for user=%d media=%d model=%s", userID, mediaID, model)
 	}
 
 	return emb.VecBytes, nil

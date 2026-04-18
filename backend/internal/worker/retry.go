@@ -47,13 +47,16 @@ func (w *RetryWorker) Run(ctx context.Context) error {
 }
 
 func (w *RetryWorker) step(ctx context.Context) {
-	// 1. Replay existing pending/failed embeddings into vector service
+	// 1. Replay existing pending/failed embeddings into vector service.
+	//    Each ref carries Model so we (a) fetch the right row's vec_bytes,
+	//    (b) ingest into the correct endpoint (image vs text), and
+	//    (c) update the right (media_id, model) row's status.
 	refs, err := w.EmbeddingsRepo.ListUnindexed(ctx, 0, w.Batch)
 	if err == nil && len(refs) > 0 {
 		for _, ref := range refs {
-			vb, err := w.EmbeddingsRepo.GetEmbeddingBytes(ctx, ref.UserID, ref.MediaID)
+			vb, err := w.EmbeddingsRepo.GetEmbeddingBytes(ctx, ref.UserID, ref.MediaID, ref.Model)
 			if err != nil || len(vb) == 0 {
-				_ = w.EmbeddingsRepo.MarkFailed(ctx, ref.UserID, ref.MediaID, utils.TruncateErr(err))
+				_ = w.EmbeddingsRepo.MarkFailed(ctx, ref.UserID, ref.MediaID, ref.Model, utils.TruncateErr(err))
 				continue
 			}
 			vec := utils.BytesToFloat32(vb)
@@ -62,15 +65,24 @@ func (w *RetryWorker) step(ctx context.Context) {
 				ImageID: ref.MediaID,
 				Vector:  vec,
 			}
-			if err := w.VectorClient.IngestImageBatch(ctx, ref.UserID, []vector.IngestItem{item}); err != nil {
-				if isAlreadyExists(err, w.AlreadyExistsSubstrings) {
-					_ = w.EmbeddingsRepo.MarkInIndex(ctx, ref.UserID, ref.MediaID)
+			// Qwen produces a text_vector that lives in the text FAISS index;
+			// siglip (and unknown/empty model, treated as image for backward
+			// compat) go into the image index.
+			var ingestErr error
+			if ref.Model == "qwen" {
+				ingestErr = w.VectorClient.IngestTextBatch(ctx, ref.UserID, []vector.IngestItem{item})
+			} else {
+				ingestErr = w.VectorClient.IngestImageBatch(ctx, ref.UserID, []vector.IngestItem{item})
+			}
+			if ingestErr != nil {
+				if isAlreadyExists(ingestErr, w.AlreadyExistsSubstrings) {
+					_ = w.EmbeddingsRepo.MarkInIndex(ctx, ref.UserID, ref.MediaID, ref.Model)
 					continue
 				}
-				_ = w.EmbeddingsRepo.MarkFailed(ctx, ref.UserID, ref.MediaID, utils.TruncateErr(err))
+				_ = w.EmbeddingsRepo.MarkFailed(ctx, ref.UserID, ref.MediaID, ref.Model, utils.TruncateErr(ingestErr))
 				continue
 			}
-			_ = w.EmbeddingsRepo.MarkInIndex(ctx, ref.UserID, ref.MediaID)
+			_ = w.EmbeddingsRepo.MarkInIndex(ctx, ref.UserID, ref.MediaID, ref.Model)
 		}
 	}
 

@@ -47,23 +47,31 @@ type MediaRepo interface {
 
 type EmbeddingsRepo interface {
 	UpsertEmbedding(ctx context.Context, emb *domain.Embedding) error
-	GetEmbedding(ctx context.Context, userID, mediaID int64) (*domain.Embedding, error)
-	DeleteEmbedding(ctx context.Context, userID, mediaID int64) error
-	MarkPending(ctx context.Context, userID, mediaID int64) error
-	MarkInIndex(ctx context.Context, userID, mediaID int64) error
-	MarkFailed(ctx context.Context, userID, mediaID int64, msg string) error
+	// All lookup and status-mutation methods take `model` so they target
+	// exactly one row of the composite-PK (media_id, model). Without this,
+	// updates would clobber every model's row for a given media.
+	GetEmbedding(ctx context.Context, userID, mediaID int64, model string) (*domain.Embedding, error)
+	DeleteEmbedding(ctx context.Context, userID, mediaID int64) error // intentional: delete all models when media is deleted
+	MarkPending(ctx context.Context, userID, mediaID int64, model string) error
+	MarkInIndex(ctx context.Context, userID, mediaID int64, model string) error
+	MarkFailed(ctx context.Context, userID, mediaID int64, model, msg string) error
 	ClaimForProcessing(ctx context.Context, userID, mediaID int64, model string) (bool, error)
 
-	// Retry helpers — return (media_id, user_id) pairs for correct namespace routing
+	// Retry helpers — return (media_id, user_id, model) triples so the
+	// retry loop can route image vs text ingest correctly and target the
+	// right row on status updates.
 	ListUnindexed(ctx context.Context, userID int64, limit int) ([]MediaRef, error)
-	GetEmbeddingBytes(ctx context.Context, userID, mediaID int64) ([]byte, error)
+	GetEmbeddingBytes(ctx context.Context, userID, mediaID int64, model string) ([]byte, error)
 	ListUnembedded(ctx context.Context, limit int) ([]MediaRef, error)
 }
 
-// MediaRef carries a media_id + user_id pair for multi-user retry routing.
+// MediaRef carries a media_id + user_id + model triple for multi-user,
+// multi-model retry routing. Model may be empty for ListUnembedded results
+// (no embedding row exists yet, so nothing to target).
 type MediaRef struct {
 	MediaID int64
 	UserID  int64
+	Model   string
 }
 
 type Enqueuer interface {
@@ -191,8 +199,11 @@ func (w *EmbedWorker) processFastBatch(ctx context.Context, batch []rawJob) {
 	for _, rj := range batch {
 		ok, err := w.EmbeddingsRepo.ClaimForProcessing(ctx, rj.job.UserID, rj.job.MediaID, modelName)
 		if err != nil {
+			// Don't tight-loop on DB errors: sleep briefly before re-enqueueing
+			// so a flapping Postgres can't pin this worker to 100% CPU.
 			w.Log.ErrorContext(ctx, "claim failed, re-enqueuing", "media_id", rj.job.MediaID, "error", err)
 			_ = w.Q.Enqueue(ctx, rj.key, rj.payload)
+			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 		if !ok {
@@ -203,19 +214,19 @@ func (w *EmbedWorker) processFastBatch(ctx context.Context, batch []rawJob) {
 		media, err := w.MediaRepo.Get(ctx, rj.job.UserID, rj.job.MediaID)
 		if err != nil || media == nil {
 			w.Log.ErrorContext(ctx, "get media failed", "media_id", rj.job.MediaID, "error", err)
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, utils.TruncateErr(err))
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, modelName, utils.TruncateErr(err))
 			continue
 		}
 
 		s3Key, err := utils.ExtractS3Key(media.URL)
 		if err != nil {
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, utils.TruncateErr(err))
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, modelName, utils.TruncateErr(err))
 			continue
 		}
 		url, err := w.Storage.GeneratePresignedURL(ctx, s3Key, 1*time.Hour)
 		if err != nil || url == "" {
 			w.Log.ErrorContext(ctx, "presign failed", "media_id", rj.job.MediaID, "error", err)
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, utils.TruncateErr(err))
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, modelName, utils.TruncateErr(err))
 			continue
 		}
 
@@ -234,9 +245,11 @@ func (w *EmbedWorker) processFastBatch(ctx context.Context, batch []rawJob) {
 
 	vectors, err := w.Clip.EmbedImageURLBatch(ctx, urls)
 	if err != nil {
-		w.Log.ErrorContext(ctx, "fast batch embed failed, marking all failed", "error", err)
+		// ML call failed wholesale — just re-enqueue. Don't MarkFailed: the
+		// claim-row will be reclaimed on retry (status moves processing -> processing
+		// with fresh updated_at) and spurious 'failed' rows confuse the retry sweep.
+		w.Log.ErrorContext(ctx, "fast batch embed failed, re-enqueueing", "error", err)
 		for _, cj := range claimed {
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, cj.raw.job.UserID, cj.raw.job.MediaID, utils.TruncateErr(err))
 			_ = w.Q.Enqueue(ctx, cj.raw.key, cj.raw.payload)
 		}
 		return
@@ -264,9 +277,8 @@ func (w *EmbedWorker) processFastBatch(ctx context.Context, batch []rawJob) {
 
 	for userID, ug := range groups {
 		if err := w.Vector.IngestImageBatch(ctx, userID, ug.items); err != nil {
-			w.Log.ErrorContext(ctx, "vector ingest failed", "user_id", userID, "error", err)
+			w.Log.ErrorContext(ctx, "vector ingest failed, re-enqueueing", "user_id", userID, "error", err)
 			for _, cj := range ug.jobs {
-				_ = w.EmbeddingsRepo.MarkFailed(ctx, cj.raw.job.UserID, cj.raw.job.MediaID, utils.TruncateErr(err))
 				_ = w.Q.Enqueue(ctx, cj.raw.key, cj.raw.payload)
 			}
 			continue
@@ -295,6 +307,7 @@ func (w *EmbedWorker) processSlowBatch(ctx context.Context, batch []rawJob) {
 		if err != nil {
 			w.Log.ErrorContext(ctx, "claim failed, re-enqueuing", "media_id", rj.job.MediaID, "error", err)
 			_ = w.Q.Enqueue(ctx, rj.key, rj.payload)
+			time.Sleep(500 * time.Millisecond)
 			continue
 		}
 		if !ok {
@@ -305,19 +318,19 @@ func (w *EmbedWorker) processSlowBatch(ctx context.Context, batch []rawJob) {
 		media, err := w.MediaRepo.Get(ctx, rj.job.UserID, rj.job.MediaID)
 		if err != nil || media == nil {
 			w.Log.ErrorContext(ctx, "get media failed", "media_id", rj.job.MediaID, "error", err)
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, utils.TruncateErr(err))
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, modelName, utils.TruncateErr(err))
 			continue
 		}
 
 		s3Key, err := utils.ExtractS3Key(media.URL)
 		if err != nil {
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, utils.TruncateErr(err))
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, modelName, utils.TruncateErr(err))
 			continue
 		}
 		url, err := w.Storage.GeneratePresignedURL(ctx, s3Key, 1*time.Hour)
 		if err != nil || url == "" {
 			w.Log.ErrorContext(ctx, "presign failed", "media_id", rj.job.MediaID, "error", err)
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, utils.TruncateErr(err))
+			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, modelName, utils.TruncateErr(err))
 			continue
 		}
 
@@ -336,9 +349,8 @@ func (w *EmbedWorker) processSlowBatch(ctx context.Context, batch []rawJob) {
 
 	results, err := w.Clip.EmbedImageURLSlowBatch(ctx, urls)
 	if err != nil {
-		w.Log.ErrorContext(ctx, "slow batch embed failed, marking all failed", "error", err)
+		w.Log.ErrorContext(ctx, "slow batch embed failed, re-enqueueing", "error", err)
 		for _, cj := range claimed {
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, cj.raw.job.UserID, cj.raw.job.MediaID, utils.TruncateErr(err))
 			_ = w.Q.Enqueue(ctx, cj.raw.key, cj.raw.payload)
 		}
 		return
@@ -368,9 +380,8 @@ func (w *EmbedWorker) processSlowBatch(ctx context.Context, batch []rawJob) {
 
 	for userID, ug := range groups {
 		if err := w.Vector.IngestTextBatch(ctx, userID, ug.items); err != nil {
-			w.Log.ErrorContext(ctx, "vector text ingest failed", "user_id", userID, "error", err)
+			w.Log.ErrorContext(ctx, "vector text ingest failed, re-enqueueing", "user_id", userID, "error", err)
 			for _, cj := range ug.jobs {
-				_ = w.EmbeddingsRepo.MarkFailed(ctx, cj.raw.job.UserID, cj.raw.job.MediaID, utils.TruncateErr(err))
 				_ = w.Q.Enqueue(ctx, cj.raw.key, cj.raw.payload)
 			}
 			continue
