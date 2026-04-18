@@ -117,6 +117,8 @@ func (h *ImageHandler) ImageUpload(c *gin.Context) {
 			item := r.Media
 			ui = &httpdto.MediaItem{
 				ID:        item.ID,
+				URL:       item.URL,
+				ThumbURL:  item.ThumbURL,
 				MimeType:  item.MimeType,
 				SizeBytes: item.SizeBytes,
 				Width:     item.Metadata.Width,
@@ -229,6 +231,8 @@ func (h *ImageHandler) ListUserImages(c *gin.Context) {
 
 		resp.Results = append(resp.Results, httpdto.MediaItem{
 			ID:        m.ID,
+			URL:       m.URL,
+			ThumbURL:  m.ThumbURL,
 			MimeType:  m.MimeType,
 			SizeBytes: m.SizeBytes,
 			Width:     m.Metadata.Width,
@@ -270,6 +274,8 @@ func (h *ImageHandler) GetUserImage(c *gin.Context) {
 	}
 	resp := httpdto.MediaItem{
 		ID:        m.ID,
+		URL:       m.URL,
+		ThumbURL:  m.ThumbURL,
 		MimeType:  m.MimeType,
 		SizeBytes: m.SizeBytes,
 		Width:     m.Metadata.Width,

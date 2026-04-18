@@ -214,19 +214,19 @@ func (w *EmbedWorker) processFastBatch(ctx context.Context, batch []rawJob) {
 		media, err := w.MediaRepo.Get(ctx, rj.job.UserID, rj.job.MediaID)
 		if err != nil || media == nil {
 			w.Log.ErrorContext(ctx, "get media failed", "media_id", rj.job.MediaID, "error", err)
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, modelName, utils.TruncateErr(err))
+			w.markAndNotifyFailed(ctx, rj.job, modelName, utils.TruncateErr(err))
 			continue
 		}
 
 		s3Key, err := utils.ExtractS3Key(media.URL)
 		if err != nil {
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, modelName, utils.TruncateErr(err))
+			w.markAndNotifyFailed(ctx, rj.job, modelName, utils.TruncateErr(err))
 			continue
 		}
 		url, err := w.Storage.GeneratePresignedURL(ctx, s3Key, 1*time.Hour)
 		if err != nil || url == "" {
 			w.Log.ErrorContext(ctx, "presign failed", "media_id", rj.job.MediaID, "error", err)
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, modelName, utils.TruncateErr(err))
+			w.markAndNotifyFailed(ctx, rj.job, modelName, utils.TruncateErr(err))
 			continue
 		}
 
@@ -318,19 +318,19 @@ func (w *EmbedWorker) processSlowBatch(ctx context.Context, batch []rawJob) {
 		media, err := w.MediaRepo.Get(ctx, rj.job.UserID, rj.job.MediaID)
 		if err != nil || media == nil {
 			w.Log.ErrorContext(ctx, "get media failed", "media_id", rj.job.MediaID, "error", err)
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, modelName, utils.TruncateErr(err))
+			w.markAndNotifyFailed(ctx, rj.job, modelName, utils.TruncateErr(err))
 			continue
 		}
 
 		s3Key, err := utils.ExtractS3Key(media.URL)
 		if err != nil {
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, modelName, utils.TruncateErr(err))
+			w.markAndNotifyFailed(ctx, rj.job, modelName, utils.TruncateErr(err))
 			continue
 		}
 		url, err := w.Storage.GeneratePresignedURL(ctx, s3Key, 1*time.Hour)
 		if err != nil || url == "" {
 			w.Log.ErrorContext(ctx, "presign failed", "media_id", rj.job.MediaID, "error", err)
-			_ = w.EmbeddingsRepo.MarkFailed(ctx, rj.job.UserID, rj.job.MediaID, modelName, utils.TruncateErr(err))
+			w.markAndNotifyFailed(ctx, rj.job, modelName, utils.TruncateErr(err))
 			continue
 		}
 
@@ -393,6 +393,20 @@ func (w *EmbedWorker) processSlowBatch(ctx context.Context, batch []rawJob) {
 	}
 
 	w.Log.InfoContext(ctx, "slow batch complete", "count", len(claimed))
+}
+
+// markAndNotifyFailed marks the embedding row as failed, updates media.status,
+// and fires an SSE event so Flutter gets a real-time "failed" notification.
+func (w *EmbedWorker) markAndNotifyFailed(ctx context.Context, job ucdto.EmbedJob, model, reason string) {
+	_ = w.EmbeddingsRepo.MarkFailed(ctx, job.UserID, job.MediaID, model, reason)
+	_ = w.MediaRepo.UpdateStatus(ctx, job.UserID, job.MediaID, "failed")
+	pubMsg := map[string]interface{}{
+		"media_id": job.MediaID,
+		"user_id":  job.UserID,
+		"status":   "failed",
+	}
+	pubBytes, _ := json.Marshal(pubMsg)
+	_ = w.Q.Publish(ctx, "status_updates", pubBytes)
 }
 
 // finalise records the embedding result to Postgres and fires an SSE event.

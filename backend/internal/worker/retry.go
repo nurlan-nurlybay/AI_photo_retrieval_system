@@ -56,7 +56,16 @@ func (w *RetryWorker) step(ctx context.Context) {
 		for _, ref := range refs {
 			vb, err := w.EmbeddingsRepo.GetEmbeddingBytes(ctx, ref.UserID, ref.MediaID, ref.Model)
 			if err != nil || len(vb) == 0 {
-				_ = w.EmbeddingsRepo.MarkFailed(ctx, ref.UserID, ref.MediaID, ref.Model, utils.TruncateErr(err))
+				// vec_bytes is NULL: the GPU call never completed for this row.
+				// Re-enqueue for EmbedWorker to retry instead of calling MarkFailed,
+				// which would create an infinite loop (failed → retry → empty bytes → failed → ...).
+				if w.Queue != nil {
+					job := ucdto.EmbedJob{UserID: ref.UserID, MediaID: ref.MediaID, Modality: "image"}
+					payload, jsonErr := json.Marshal(job)
+					if jsonErr == nil {
+						_ = w.Queue.Enqueue(ctx, w.QueueKey, payload)
+					}
+				}
 				continue
 			}
 			vec := utils.BytesToFloat32(vb)

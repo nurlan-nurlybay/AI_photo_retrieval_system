@@ -24,6 +24,8 @@ type SearchResponse struct {
 type MediaResponse struct {
 	ID        int64   `json:"id"`
 	UserID    int64   `json:"user_id"`
+	URL       string  `json:"url"`
+	ThumbURL  string  `json:"thumb_url"`
 	Score     float32 `json:"score,omitempty"`
 	LocalPath string  `json:"local_path,omitempty"`
 }
@@ -82,6 +84,8 @@ type UserImageDeleteResponse struct {
 // GENERIC RESPONSE
 type MediaItem struct {
 	ID        int64  `json:"id"`
+	URL       string `json:"url"`
+	ThumbURL  string `json:"thumb_url"`
 	MimeType  string `json:"mime_type"`
 	SizeBytes int64  `json:"size_bytes"`
 	Width     int    `json:"width"`
