@@ -22,7 +22,8 @@ class DeviceIdService {
     final prefs = await SharedPreferences.getInstance();
 
     final cached = prefs.getInt(_prefKey);
-    if (cached != null && cached > 0) return cached;
+    // Accept only 8-digit IDs; recompute if missing or from the old long-hash scheme.
+    if (cached != null && cached >= 10000000 && cached <= 99999999) return cached;
 
     final raw = await _rawDeviceId();
     final id = _stableHash(raw);
@@ -51,14 +52,13 @@ class DeviceIdService {
     return 'fallback-${DateTime.now().microsecondsSinceEpoch}';
   }
 
-  /// Deterministic hash of [s] → positive int64.
-  /// djb2-style polynomial hash, masked to 63 bits so the result is always
-  /// non-negative and fits both a Dart native int and a Go int64.
+  /// Deterministic hash of [s] → 8-digit positive integer (10_000_000–99_999_999).
   static int _stableHash(String s) {
     var h = 5381;
     for (final c in s.codeUnits) {
       h = (h * 31 + c) & 0x7FFFFFFFFFFFFFFF;
     }
-    return h == 0 ? 1 : h;
+    if (h == 0) h = 1;
+    return (h % 90000000) + 10000000;
   }
 }

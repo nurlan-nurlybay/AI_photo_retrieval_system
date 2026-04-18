@@ -19,6 +19,7 @@ class _ImageUploadScreenState extends State<ImageUploadScreen> {
   List<File> _picked = [];
   bool _busy = false;
   UploadResponseModel? _last;
+  String? _batchProgress;
 
 Future<void> _pickImages() async {
   try {
@@ -46,23 +47,46 @@ Future<void> _pickImages() async {
       );
       return;
     }
-    setState(() => _busy = true);
+    setState(() { _busy = true; _batchProgress = null; });
+
+    const batchSize = 10;
+    int totalSaved = 0, totalDups = 0, totalFailed = 0;
+    final localPaths = _picked.map((f) => f.path).toList();
+    final totalBatches = (_picked.length / batchSize).ceil();
+
     try {
-      final localPaths = _picked.map((f) => f.path).toList();
-      final resp = await _api.uploadImages(files: _picked, localPaths: localPaths, dedup: true);
-      setState(() => _last = resp);
-      if (resp.summary.saved > 0) {
-        PhotoSyncService.instance.notifyNewUploads(resp.summary.saved);
+      for (int i = 0; i < _picked.length; i += batchSize) {
+        final end = (i + batchSize).clamp(0, _picked.length);
+        final batchNum = i ~/ batchSize + 1;
+        setState(() => _batchProgress = 'Uploading batch $batchNum / $totalBatches…');
+
+        final resp = await _api.uploadImages(
+          files: _picked.sublist(i, end),
+          localPaths: localPaths.sublist(i, end),
+          dedup: true,
+        );
+        totalSaved   += resp.summary.saved;
+        totalDups    += resp.summary.duplicates;
+        totalFailed  += resp.summary.failed;
+        setState(() => _last = resp);
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Saved: ${resp.summary.saved}, Duplicates: ${resp.summary.duplicates}, Failed: ${resp.summary.failed}')),
-      );
+
+      if (totalSaved > 0) {
+        PhotoSyncService.instance.notifyNewUploads(totalSaved);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Saved: $totalSaved, Duplicates: $totalDups, Failed: $totalFailed')),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Upload failed: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
     } finally {
-      setState(() => _busy = false);
+      setState(() { _busy = false; _batchProgress = null; });
     }
   }
 
@@ -91,8 +115,12 @@ Future<void> _pickImages() async {
             ],
           ),
           if (_busy) const Padding(
-            padding: EdgeInsets.all(12.0),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: LinearProgressIndicator(),
+          ),
+          if (_batchProgress != null) Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+            child: Text(_batchProgress!, style: const TextStyle(fontSize: 12, color: Colors.white54)),
           ),
           Expanded(
             child: _picked.isEmpty
