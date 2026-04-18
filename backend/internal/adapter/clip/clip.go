@@ -11,7 +11,6 @@ import (
 
 	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/config"
 	clipdto "github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/adapter/clip/dto"
-	"github.com/nurlan-nurlybay/AI_photo_retrieval_system/internal/usecase"
 )
 
 type Client struct {
@@ -23,7 +22,10 @@ func NewClientFromURL(baseURL string, httpClient *http.Client) *Client {
 	return &Client{baseURL: baseURL, http: httpClient}
 }
 
-func NewClient(ctx context.Context, cfg config.Clip, httpClent *http.Client) (usecase.Embedder, error) {
+// NewClient returns the concrete *Client rather than a narrow interface so
+// that callers can pick the interface they need (usecase.Embedder for search,
+// worker.Embedder for the batch worker which needs the batch methods).
+func NewClient(ctx context.Context, cfg config.Clip, httpClent *http.Client) (*Client, error) {
 	base := fmt.Sprintf("http://%s:%d", cfg.Host, cfg.Port)
 
 	client := &Client{

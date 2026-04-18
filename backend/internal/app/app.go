@@ -62,8 +62,10 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	}
 	fmt.Println("httpClient", httpClient.Timeout)
 
-	// Prep dependencies
-	var clipClient usecase.Embedder
+	// Prep dependencies. Hold the concrete *clipadapter.Client so it can
+	// satisfy both usecase.Embedder (search) and worker.Embedder (batch
+	// worker) via structural typing.
+	var clipClient *clipadapter.Client
 	if mlURL := os.Getenv("ML_SERVICE_URL"); mlURL != "" {
 		clipClient = clipadapter.NewClientFromURL(mlURL, httpClient)
 		log.Info("connected to CLIP client via env", "url", mlURL)
@@ -120,6 +122,12 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 	mediaSvc := usecase.NewMediaService(vectorClient, mediaRepo, store, redisClient, imgProc, metaExt, log)
 
 	// Setup workers
+	batchSize := 32
+	if val := os.Getenv("EMBED_BATCH_SIZE"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			batchSize = n
+		}
+	}
 	ew := &worker.EmbedWorker{
 		Q:              redisClient,
 		EmbeddingsRepo: embeddingsRepo,
@@ -131,6 +139,7 @@ func New(ctx context.Context, cfg *config.Config, log *logger.Logger) (*App, err
 		FastQueueKey:   "jobs:fast_queue",
 		SlowQueueKey:   "jobs:slow_queue",
 		IdleDelay:      2 * time.Second,
+		BatchSize:      batchSize,
 		Log:            log,
 	}
 	rw := &worker.RetryWorker{
